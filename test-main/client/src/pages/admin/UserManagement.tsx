@@ -1,0 +1,497 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Typography, 
+  Box, 
+  Paper, 
+  Button, 
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  CircularProgress,
+  Alert,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Grid,
+  Chip,
+  IconButton
+} from '@mui/material';
+import { useFormik } from 'formik';
+import * as Yup from 'yup';
+import axios from 'axios';
+import { useAuth } from '../../context/AuthContext';
+import Layout from '../../components/Layout';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
+
+interface User {
+  id: number;
+  username: string;
+  full_name: string;
+  phone?: string;
+  nationality?: string;
+  location?: string;
+  role: 'admin' | 'supervisor' | 'employee';
+  created_at?: string;
+}
+
+interface SupervisorAssignment {
+  employeeId: number;
+  supervisorId: number;
+}
+
+const UserManagement: React.FC = () => {
+  const { user } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
+  const [supervisors, setSupervisors] = useState<User[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userFormOpen, setUserFormOpen] = useState<boolean>(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [assignSupervisorDialogOpen, setAssignSupervisorDialogOpen] = useState<boolean>(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [assignmentData, setAssignmentData] = useState<SupervisorAssignment>({
+    employeeId: 0,
+    supervisorId: 0
+  });
+
+  // Fetch users and supervisors
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const [usersResponse, supervisorsResponse] = await Promise.all([
+          axios.get('/api/users'),
+          axios.get('/api/users/supervisors')
+        ]);
+        
+        setUsers(usersResponse.data.users);
+        setSupervisors(supervisorsResponse.data.supervisors);
+      } catch (error: any) {
+        console.error('Error fetching users:', error);
+        setError(error.response?.data?.message || 'حدث خطأ أثناء جلب بيانات المستخدمين');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // User form handling
+  const userFormik = useFormik({
+    initialValues: {
+      id: 0,
+      username: '',
+      password: '',
+      full_name: '',
+      phone: '',
+      nationality: '',
+      location: '',
+      role: 'employee' as 'admin' | 'supervisor' | 'employee',
+    },
+    validationSchema: Yup.object({
+      username: Yup.string().required('اسم المستخدم مطلوب'),
+      password: Yup.string().test(
+        'required-if-new-user',
+        'كلمة المرور مطلوبة',
+        function(value) {
+          return this.parent.id ? true : (value && value.length > 0);
+        }
+      ),
+      full_name: Yup.string().required('الاسم الكامل مطلوب'),
+      role: Yup.string().required('الدور مطلوب'),
+    }),
+    onSubmit: async (values, { resetForm }) => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        if (values.id) {
+          // Update existing user
+          await axios.post(`/api/users/${values.id}`, {
+            full_name: values.full_name,
+            phone: values.phone || null,
+            nationality: values.nationality || null,
+            location: values.location || null,
+            role: values.role,
+          });
+        } else {
+          // Create new user
+          await axios.post('/api/auth/register', values);
+        }
+        
+        // Refresh user list
+        const response = await axios.get('/api/users');
+        setUsers(response.data.users);
+        
+        if (values.role === 'supervisor' || values.role === 'admin') {
+          const supervisorsResponse = await axios.get('/api/users/supervisors');
+          setSupervisors(supervisorsResponse.data.supervisors);
+        }
+        
+        resetForm();
+        setUserFormOpen(false);
+      } catch (error: any) {
+        console.error('Error saving user:', error);
+        setError(error.response?.data?.message || 'حدث خطأ أثناء حفظ بيانات المستخدم');
+      } finally {
+        setLoading(false);
+      }
+    },
+  });
+
+  // Open user form for adding new user
+  const handleAddUser = () => {
+    userFormik.resetForm();
+    setSelectedUser(null);
+    setUserFormOpen(true);
+  };
+
+  // Open user form for editing user
+  const handleEditUser = (user: User) => {
+    userFormik.setValues({
+      id: user.id,
+      username: user.username,
+      password: '',
+      full_name: user.full_name,
+      phone: user.phone || '',
+      nationality: user.nationality || '',
+      location: user.location || '',
+      role: user.role,
+    });
+    setSelectedUser(user);
+    setUserFormOpen(true);
+  };
+
+  // Open delete confirmation dialog
+  const handleDeleteClick = (user: User) => {
+    setSelectedUser(user);
+    setDeleteDialogOpen(true);
+  };
+
+  // Delete user
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      await axios.delete(`/api/users/${selectedUser.id}`);
+      
+      // Refresh user list
+      const response = await axios.get('/api/users');
+      setUsers(response.data.users);
+      
+      setDeleteDialogOpen(false);
+      setSelectedUser(null);
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      setError(error.response?.data?.message || 'حدث خطأ أثناء حذف المستخدم');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Open assign supervisor dialog
+  const handleAssignSupervisorClick = (employee: User) => {
+    setSelectedUser(employee);
+    setAssignmentData({
+      employeeId: employee.id,
+      supervisorId: 0
+    });
+    setAssignSupervisorDialogOpen(true);
+  };
+
+  // Assign supervisor to employee
+  const handleAssignSupervisor = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      await axios.post('/api/users/assign-supervisor', assignmentData);
+      
+      setAssignSupervisorDialogOpen(false);
+      setSelectedUser(null);
+      
+      // Show success message or refresh data if needed
+    } catch (error: any) {
+      console.error('Error assigning supervisor:', error);
+      setError(error.response?.data?.message || 'حدث خطأ أثناء تعيين المشرف');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading && users.length === 0) {
+    return (
+      <Layout title="إدارة المستخدمين">
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress />
+        </Box>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout title="إدارة المستخدمين">
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h4" component="h1">
+          إدارة المستخدمين
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAddUser}
+        >
+          إضافة مستخدم
+        </Button>
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Paper sx={{ p: 2 }}>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>اسم المستخدم</TableCell>
+                <TableCell>الاسم الكامل</TableCell>
+                <TableCell>الدور</TableCell>
+                <TableCell>الهاتف</TableCell>
+                <TableCell>الإجراءات</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.username}</TableCell>
+                  <TableCell>{user.full_name}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={user.role === 'admin' ? 'مدير النظام' : 
+                             user.role === 'supervisor' ? 'مشرف' : 'موظف'} 
+                      color={user.role === 'admin' ? 'secondary' : 
+                             user.role === 'supervisor' ? 'primary' : 'default'} 
+                      size="small" 
+                    />
+                  </TableCell>
+                  <TableCell>{user.phone || '-'}</TableCell>
+                  <TableCell>
+                    <IconButton onClick={() => handleEditUser(user)} size="small">
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    {user.role === 'employee' && (
+                      <IconButton onClick={() => handleAssignSupervisorClick(user)} size="small">
+                        <SupervisorAccountIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                    <IconButton onClick={() => handleDeleteClick(user)} size="small" color="error">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+
+      {/* Add/Edit User Dialog */}
+      <Dialog open={userFormOpen} onClose={() => setUserFormOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{selectedUser ? 'تعديل بيانات المستخدم' : 'إضافة مستخدم جديد'}</DialogTitle>
+        <form onSubmit={userFormik.handleSubmit}>
+          <DialogContent>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  id="username"
+                  name="username"
+                  label="اسم المستخدم"
+                  value={userFormik.values.username}
+                  onChange={userFormik.handleChange}
+                  onBlur={userFormik.handleBlur}
+                  error={userFormik.touched.username && Boolean(userFormik.errors.username)}
+                  helperText={userFormik.touched.username && userFormik.errors.username}
+                  disabled={!!selectedUser}
+                  margin="normal"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  id="password"
+                  name="password"
+                  label={selectedUser ? 'كلمة المرور (اتركها فارغة للإبقاء على كلمة المرور الحالية)' : 'كلمة المرور'}
+                  type="password"
+                  value={userFormik.values.password}
+                  onChange={userFormik.handleChange}
+                  onBlur={userFormik.handleBlur}
+                  error={userFormik.touched.password && Boolean(userFormik.errors.password)}
+                  helperText={userFormik.touched.password && userFormik.errors.password}
+                  margin="normal"
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  id="full_name"
+                  name="full_name"
+                  label="الاسم الكامل"
+                  value={userFormik.values.full_name}
+                  onChange={userFormik.handleChange}
+                  onBlur={userFormik.handleBlur}
+                  error={userFormik.touched.full_name && Boolean(userFormik.errors.full_name)}
+                  helperText={userFormik.touched.full_name && userFormik.errors.full_name}
+                  margin="normal"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  id="phone"
+                  name="phone"
+                  label="الهاتف"
+                  value={userFormik.values.phone}
+                  onChange={userFormik.handleChange}
+                  margin="normal"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth margin="normal">
+                  <InputLabel id="role-label">الدور</InputLabel>
+                  <Select
+                    labelId="role-label"
+                    id="role"
+                    name="role"
+                    value={userFormik.values.role}
+                    onChange={userFormik.handleChange}
+                    label="الدور"
+                  >
+                    <MenuItem value="admin">مدير النظام</MenuItem>
+                    <MenuItem value="supervisor">مشرف</MenuItem>
+                    <MenuItem value="employee">موظف</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  id="nationality"
+                  name="nationality"
+                  label="الجنسية"
+                  value={userFormik.values.nationality}
+                  onChange={userFormik.handleChange}
+                  margin="normal"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  id="location"
+                  name="location"
+                  label="الموقع"
+                  value={userFormik.values.location}
+                  onChange={userFormik.handleChange}
+                  margin="normal"
+                />
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setUserFormOpen(false)}>إلغاء</Button>
+            <Button 
+              type="submit" 
+              variant="contained" 
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : (selectedUser ? 'تحديث' : 'إضافة')}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+      >
+        <DialogTitle>تأكيد الحذف</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            هل أنت متأكد من رغبتك في حذف المستخدم "{selectedUser?.full_name}"؟
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>إلغاء</Button>
+          <Button onClick={handleDeleteUser} color="error" variant="contained">
+            {loading ? <CircularProgress size={24} /> : 'حذف'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Assign Supervisor Dialog */}
+      <Dialog
+        open={assignSupervisorDialogOpen}
+        onClose={() => setAssignSupervisorDialogOpen(false)}
+      >
+        <DialogTitle>تعيين مشرف</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            اختر مشرفًا للموظف "{selectedUser?.full_name}"
+          </DialogContentText>
+          <FormControl fullWidth>
+            <InputLabel id="supervisor-label">المشرف</InputLabel>
+            <Select
+              labelId="supervisor-label"
+              value={assignmentData.supervisorId}
+              onChange={(e) => setAssignmentData({
+                ...assignmentData,
+                supervisorId: e.target.value as number
+              })}
+              label="المشرف"
+            >
+              {supervisors.map(supervisor => (
+                <MenuItem key={supervisor.id} value={supervisor.id}>
+                  {supervisor.full_name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignSupervisorDialogOpen(false)}>إلغاء</Button>
+          <Button 
+            onClick={handleAssignSupervisor} 
+            variant="contained"
+            disabled={!assignmentData.supervisorId || loading}
+          >
+            {loading ? <CircularProgress size={24} /> : 'تعيين'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Layout>
+  );
+};
+
+export default UserManagement; 
