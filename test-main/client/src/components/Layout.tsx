@@ -83,13 +83,13 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
             {user?.role === 'admin' && (
               <>
                 <Button color="inherit" onClick={() => navigate('/admin')}>
+                  التقارير
+                </Button>
+                <Button color="inherit" onClick={() => navigate('/supervisor/reports')}>
                   لوحة التحكم
                 </Button>
                 <Button color="inherit" onClick={() => navigate('/admin/users')}>
                   إدارة المستخدمين
-                </Button>
-                <Button color="inherit" onClick={() => navigate('/supervisor/reports')}>
-                  التقارير
                 </Button>
               </>
             )}
