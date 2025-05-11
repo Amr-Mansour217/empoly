@@ -15,7 +15,7 @@ router.get('/supervisors', authenticateToken, isSupervisor, userController.getAl
 router.post('/assign-supervisor', authenticateToken, isAdmin, userController.assignSupervisor);
 
 // Protected routes with ownership check
-router.get('/:id', authenticateToken, isOwnerOrSupervisor, userController.getUserById);
+router.get('/:id([0-9]+)', authenticateToken, isOwnerOrSupervisor, userController.getUserById);
 router.get('/:id/supervisor', authenticateToken, isOwnerOrSupervisor, userController.getSupervisorForEmployee);
 router.get('/supervisor/:id/employees', authenticateToken, isSupervisor, userController.getEmployeesBySupervisor);
 

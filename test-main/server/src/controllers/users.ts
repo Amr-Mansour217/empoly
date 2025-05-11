@@ -2,14 +2,41 @@ import { Request, Response } from 'express';
 import userModel from '../models/user';
 
 class UserController {
+  // Get all supervisors
+  async getAllSupervisors(req: Request, res: Response) {
+    try {
+      const supervisors = await userModel.getAllSupervisors();
+      
+      // Si no hay usuarios, enviamos un array vacío pero con código 200
+      // en lugar de un error 500 para mejorar la experiencia de usuario
+      return res.status(200).json({ 
+        supervisors,
+        message: supervisors.length === 0 ? 'No supervisors found, you may need to create users first' : undefined
+      });
+    } catch (error) {
+      console.error('Get all supervisors error:', error);
+      return res.status(500).json({ message: 'An error occurred while getting supervisors' });
+    }
+  }
+
   // Get all users
   async getAllUsers(req: Request, res: Response) {
     try {
       const users = await userModel.getAll();
-      return res.status(200).json({ users });
+      console.log(`Users API - Found ${users.length} users`);
+      return res.status(200).json({ 
+        users,
+        success: true,
+        // If no users are found, provide an informative message
+        message: users.length === 0 ? 'No users found in the system yet' : undefined 
+      });
     } catch (error) {
       console.error('Get all users error:', error);
-      return res.status(500).json({ message: 'An error occurred while getting users' });
+      return res.status(500).json({ 
+        success: false,
+        message: 'An error occurred while getting users',
+        users: [] // Always include empty users array even on error
+      });
     }
   }
   
@@ -108,17 +135,6 @@ class UserController {
     } catch (error) {
       console.error('Get all employees error:', error);
       return res.status(500).json({ message: 'An error occurred while getting employees' });
-    }
-  }
-  
-  // Get all supervisors
-  async getAllSupervisors(req: Request, res: Response) {
-    try {
-      const supervisors = await userModel.getAllSupervisors();
-      return res.status(200).json({ supervisors });
-    } catch (error) {
-      console.error('Get all supervisors error:', error);
-      return res.status(500).json({ message: 'An error occurred while getting supervisors' });
     }
   }
   

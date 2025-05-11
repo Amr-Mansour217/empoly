@@ -25,7 +25,7 @@ const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
   if (user?.role !== 'admin') {
     // Redirect to appropriate dashboard based on role
     if (user?.role === 'supervisor') {
-      return <Navigate to="/supervisor" />;
+      return <Navigate to="/supervisor/reports" />;
     } else {
       return <Navigate to="/employee" />;
     }

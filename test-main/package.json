@@ -1,0 +1,17 @@
+{
+  "name": "test-main",
+  "version": "1.0.0",
+  "description": "نظام متكامل لمتابعة أداء العاملين يوميًا، وإنشاء تقارير تفصيلية حول الحضور والمنجزات.",
+  "main": "direct-test.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "better-sqlite3": "^11.10.0"
+  }
+}

@@ -109,15 +109,26 @@ class ReportController {
       // Filter by date range if provided
       const startDate = req.query.startDate as string;
       const endDate = req.query.endDate as string;
+      const supervisorId = req.query.supervisorId ? parseInt(req.query.supervisorId as string) : null;
       
       let reports;
       
       if (req.user.role === 'admin') {
-        // Admin can see all reports
-        if (startDate && endDate) {
-          reports = await reportModel.getByDateRange(startDate, endDate);
+        // Admin can see all reports or filter by supervisor
+        if (supervisorId) {
+          // Admin requesting reports for a specific supervisor's employees
+          if (startDate && endDate) {
+            reports = await reportModel.getBySupervisorAndDateRange(supervisorId, startDate, endDate);
+          } else {
+            reports = await reportModel.getBySupervisorId(supervisorId);
+          }
         } else {
-          reports = await reportModel.getAll();
+          // Admin requesting all reports
+          if (startDate && endDate) {
+            reports = await reportModel.getByDateRange(startDate, endDate);
+          } else {
+            reports = await reportModel.getAll();
+          }
         }
       } else if (req.user.role === 'supervisor') {
         // Supervisor can only see reports from their employees

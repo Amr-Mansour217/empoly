@@ -10,10 +10,8 @@ const NotFound: React.FC = () => {
   const handleGoBack = () => {
     if (isAuthenticated && user) {
       // Redirect based on user role
-      if (user.role === 'admin') {
-        navigate('/admin');
-      } else if (user.role === 'supervisor') {
-        navigate('/supervisor');
+      if (user.role === 'admin' || user.role === 'supervisor') {
+        navigate('/supervisor/reports');
       } else {
         navigate('/employee');
       }

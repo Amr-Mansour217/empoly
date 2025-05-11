@@ -71,7 +71,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       setError(null);
       
+      console.log('Intentando iniciar sesión con:', { username, password: '******' });
+      
       const response = await axios.post('/api/auth/login', { username, password });
+      console.log('Respuesta del servidor:', response.data);
+      
       const { token, user } = response.data;
       
       // Save token to localStorage
@@ -85,19 +89,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAuthenticated(true);
       
       // Redirect based on user role
-      if (user.role === 'admin') {
-        navigate('/admin');
-      } else if (user.role === 'supervisor') {
-        navigate('/supervisor');
+      if (user.role === 'admin' || user.role === 'supervisor') {
+        navigate('/supervisor/reports');
       } else {
         navigate('/employee');
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      if (error.response?.data?.message) {
-        setError(error.response.data.message);
+      
+      if (error.response) {
+        // El servidor respondió con un código de estado diferente de 2xx
+        console.error('Error response:', {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers
+        });
+        
+        setError(error.response.data?.message || 'فشل تسجيل الدخول. يرجى المحاولة مرة أخرى.');
+      } else if (error.request) {
+        // La solicitud se realizó pero no se recibió respuesta
+        console.error('No response received:', error.request);
+        setError('لم يتم استلام استجابة من الخادم. تأكد من أن الخادم يعمل.');
+        throw error; // Relanzamos el error para que la página de login pueda detectar problemas de red
       } else {
-        setError('فشل تسجيل الدخول. يرجى المحاولة مرة أخرى.');
+        // Algo sucedió en la configuración de la solicitud que desencadenó un error
+        console.error('Request error:', error.message);
+        setError(`حدث خطأ أثناء الاتصال: ${error.message}`);
+        throw error;
       }
     } finally {
       setIsLoading(false);

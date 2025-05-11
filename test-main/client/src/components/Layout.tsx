@@ -56,10 +56,8 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
   };
 
   const navigateToDashboard = () => {
-    if (user?.role === 'admin') {
-      navigate('/admin');
-    } else if (user?.role === 'supervisor') {
-      navigate('/supervisor');
+    if (user?.role === 'admin' || user?.role === 'supervisor') {
+      navigate('/supervisor/reports');
     } else {
       navigate('/employee');
     }
@@ -82,11 +80,8 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
           <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
             {user?.role === 'admin' && (
               <>
-                <Button color="inherit" onClick={() => navigate('/admin')}>
-                  التقارير
-                </Button>
                 <Button color="inherit" onClick={() => navigate('/supervisor/reports')}>
-                  لوحة التحكم
+                  التقارير
                 </Button>
                 <Button color="inherit" onClick={() => navigate('/admin/users')}>
                   إدارة المستخدمين
@@ -96,9 +91,6 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
             
             {user?.role === 'supervisor' && (
               <>
-                <Button color="inherit" onClick={() => navigate('/supervisor')}>
-                  لوحة التحكم
-                </Button>
                 <Button color="inherit" onClick={() => navigate('/supervisor/reports')}>
                   التقارير
                 </Button>
@@ -174,23 +166,17 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
             >
               {user?.role === 'admin' && (
                 <>
-                  <MenuItem onClick={() => { navigate('/admin'); handleMobileMenuClose(); }}>
-                    لوحة التحكم
+                  <MenuItem onClick={() => { navigate('/supervisor/reports'); handleMobileMenuClose(); }}>
+                    التقارير
                   </MenuItem>
                   <MenuItem onClick={() => { navigate('/admin/users'); handleMobileMenuClose(); }}>
                     إدارة المستخدمين
-                  </MenuItem>
-                  <MenuItem onClick={() => { navigate('/supervisor/reports'); handleMobileMenuClose(); }}>
-                    التقارير
                   </MenuItem>
                 </>
               )}
               
               {user?.role === 'supervisor' && (
                 <>
-                  <MenuItem onClick={() => { navigate('/supervisor'); handleMobileMenuClose(); }}>
-                    لوحة التحكم
-                  </MenuItem>
                   <MenuItem onClick={() => { navigate('/supervisor/reports'); handleMobileMenuClose(); }}>
                     التقارير
                   </MenuItem>

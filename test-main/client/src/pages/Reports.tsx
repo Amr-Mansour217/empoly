@@ -18,7 +18,8 @@ import {
   MenuItem,
   TextField,
   Button,
-  Chip
+  Chip,
+  Divider
 } from '@mui/material';
 import { format, subDays } from 'date-fns';
 import axios from 'axios';
@@ -38,11 +39,20 @@ interface Report {
   submitted_at: string;
 }
 
+interface Supervisor {
+  id: number;
+  full_name: string;
+  role: string;
+}
+
 const Reports: React.FC = () => {
   const { user } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
+  const [selectedSupervisor, setSelectedSupervisor] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   
   // Filter states
   const today = new Date().toISOString().split('T')[0];
@@ -54,9 +64,136 @@ const Reports: React.FC = () => {
     activityType: 'all',
   });
 
+  // تحميل البيانات المناسبة عند تحميل الصفحة أو تغيير المستخدم
   useEffect(() => {
-    fetchReports();
-  }, []);
+    if (user?.role === 'admin') {
+      // محاولة جلب المشرفين مع محاولات متكررة في حالة الفشل
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      const attemptFetchSupervisors = async () => {
+        try {
+          await fetchSupervisors();
+        } catch (err) {
+          if (retryCount < maxRetries) {
+            retryCount++;
+            console.log(`Retrying to fetch supervisors (${retryCount}/${maxRetries})...`);
+            setTimeout(attemptFetchSupervisors, 2000); // محاولة كل 2 ثانية
+          }
+        }
+      };
+      
+      attemptFetchSupervisors();
+    } else {
+      fetchReports();
+    }
+  }, [user]);
+  
+  // إعادة تحميل التقارير عند اختيار مشرف
+  useEffect(() => {
+    if (selectedSupervisor) {
+      fetchReports();
+    }
+  }, [selectedSupervisor]);
+
+  // دالة مساعدة لتحليل الاستجابات وتسجيل المعلومات التشخيصية
+  const logResponseInfo = (response: any, source: string) => {
+    try {
+      const info = {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data
+      };
+      
+      console.log(`${source} response info:`, info);
+      setDebugInfo(JSON.stringify(info, null, 2));
+      return info;
+    } catch (err) {
+      console.error('Error logging response:', err);
+      return null;
+    }
+  };
+
+  // استدعاء قائمة المشرفين
+  const fetchSupervisors = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setDebugInfo(null);
+      
+      console.log('Fetching supervisors...');
+      
+      // محاولة استخدام المسار المخصص للمشرفين أولاً
+      try {
+        const response = await axios.get('/api/users/supervisors', {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+          timeout: 10000
+        });
+        
+        logResponseInfo(response, 'Supervisors API');
+        
+        if (response.data && Array.isArray(response.data.supervisors)) {
+          setSupervisors(response.data.supervisors);
+          if (response.data.supervisors.length === 0) {
+            console.warn('No supervisors returned from specific API');
+          }
+          return; // نجحت العملية، نخرج من الدالة هنا
+        }
+      } catch (specificError: any) {
+        console.warn('Error using specific supervisors API, falling back to all users:', specificError);
+        // نواصل إلى الطريقة البديلة
+      }
+      
+      // طريقة بديلة: استدعاء جميع المستخدمين ثم تصفية المشرفين والمدراء
+      const response = await axios.get('/api/users', {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        },
+        timeout: 10000
+      });
+      
+      const responseInfo = logResponseInfo(response, 'Users API');
+      
+      if (response.data && Array.isArray(response.data.users)) {
+        // تصفية المستخدمين للحصول على المشرفين والمدراء
+        const filteredSupervisors = response.data.users.filter(
+          (user: any) => user.role === 'supervisor' || user.role === 'admin'
+        );
+        
+        setSupervisors(filteredSupervisors);
+        
+        if (filteredSupervisors.length === 0) {
+          console.warn('No supervisors found among users');
+          setError('لا يوجد مشرفين متاحين في النظام');
+        }
+      } else {
+        console.error('Users data is not an array:', response.data);
+        setSupervisors([]);
+        setError('تنسيق البيانات غير صحيح');
+      }
+    } catch (error: any) {
+      console.error('Error fetching supervisors:', error);
+      setSupervisors([]);
+      
+      if (error.response) {
+        const errorInfo = logResponseInfo(error.response, 'Error Response');
+        setError(`حدث خطأ أثناء جلب قائمة المشرفين (${error.response.status}): ${error.response.data?.message || error.message}`);
+      } else if (error.request) {
+        setError('تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى');
+        setDebugInfo(`No response received: ${JSON.stringify(error.request)}`);
+      } else {
+        setError(`حدث خطأ: ${error.message}`);
+        setDebugInfo(`Error: ${error.message}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchReports = async () => {
     try {
@@ -68,11 +205,26 @@ const Reports: React.FC = () => {
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
       
+      // If admin and supervisor selected, add supervisor ID
+      if (user?.role === 'admin' && selectedSupervisor) {
+        params.append('supervisorId', selectedSupervisor.toString());
+      }
+      
+      console.log(`Fetching reports with params: ${params.toString()}`);
       const response = await axios.get(`/api/reports?${params.toString()}`);
-      setReports(response.data.reports);
+      console.log('Reports response:', response.data);
+      
+      if (response.data && Array.isArray(response.data.reports)) {
+        setReports(response.data.reports);
+      } else {
+        console.error('Reports data structure is unexpected:', response.data);
+        setReports([]);
+        setError('تنسيق بيانات التقارير غير صحيح');
+      }
     } catch (error: any) {
       console.error('Error fetching reports:', error);
       setError(error.response?.data?.message || 'حدث خطأ أثناء جلب التقارير');
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -86,11 +238,15 @@ const Reports: React.FC = () => {
     });
   };
 
+  const handleSupervisorChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+    setSelectedSupervisor(event.target.value as number);
+  };
+
   const handleSearch = () => {
     fetchReports();
   };
 
-  if (loading && reports.length === 0) {
+  if (loading && reports.length === 0 && (user?.role !== 'admin' || supervisors.length === 0)) {
     return (
       <Layout title="التقارير">
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -117,9 +273,84 @@ const Reports: React.FC = () => {
         </Alert>
       )}
 
-      {/* Filters */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Grid container spacing={2} alignItems="center">
+      {/* Admin Supervisor Selection */}
+      {user?.role === 'admin' && (
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">
+              اختر المشرف
+            </Typography>
+            <Button 
+              variant="outlined" 
+              size="small"
+              onClick={() => fetchSupervisors()}
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={16} /> : undefined}
+            >
+              تحديث القائمة
+            </Button>
+          </Box>
+          
+          {loading && supervisors.length === 0 ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <FormControl fullWidth>
+              <InputLabel id="supervisor-select-label">المشرف</InputLabel>
+              <Select
+                labelId="supervisor-select-label"
+                id="supervisor-select"
+                value={selectedSupervisor || ''}
+                onChange={(e) => handleSupervisorChange(e as any)}
+                label="المشرف"
+                disabled={supervisors.length === 0}
+              >
+                {supervisors.length > 0 ? (
+                  supervisors.map((supervisor) => (
+                    <MenuItem key={supervisor.id} value={supervisor.id}>
+                      {supervisor.full_name} {supervisor.role === 'admin' ? '(مدير)' : '(مشرف)'}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem disabled value="">لا يوجد مشرفين</MenuItem>
+                )}
+              </Select>
+            </FormControl>
+          )}
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+              <Box sx={{ mt: 1, textAlign: 'center' }}>
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={() => fetchSupervisors()} 
+                  sx={{ ml: 1 }}
+                >
+                  إعادة المحاولة
+                </Button>
+              </Box>
+              
+              {/* معلومات تشخيص للمسؤولين */}
+              {debugInfo && (
+                <Box sx={{ mt: 2, p: 1, bgcolor: '#f5f5f5', borderRadius: 1, maxHeight: '150px', overflow: 'auto' }}>
+                  <Typography variant="caption" component="pre" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                    {debugInfo}
+                  </Typography>
+                </Box>
+              )}
+            </Alert>
+          )}
+        </Paper>
+      )}
+
+      {/* Show reports only if supervisor is selected for admin or always for supervisor */}
+      {(user?.role !== 'admin' || (user?.role === 'admin' && selectedSupervisor)) && (
+        <>
+          {/* Filters */}
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} sm={6} md={3}>
             <TextField
               fullWidth
@@ -183,6 +414,14 @@ const Reports: React.FC = () => {
 
       {/* Reports Table */}
       <Paper sx={{ p: 2 }}>
+        {user?.role === 'admin' && selectedSupervisor && supervisors.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              تقارير موظفي: {supervisors.find(sup => sup.id === selectedSupervisor)?.full_name}
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+          </Box>
+        )}
         <TableContainer>
           {filteredReports.length > 0 ? (
             <Table>
@@ -247,6 +486,19 @@ const Reports: React.FC = () => {
           </Box>
         )}
       </Paper>
+      </>
+      )}
+
+      {user?.role === 'admin' && !selectedSupervisor && (
+        <Box sx={{ py: 5, textAlign: 'center' }}>
+          <Typography variant="h5" color="text.secondary" gutterBottom>
+            الرجاء اختيار مشرف لعرض التقارير
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            يمكنك عرض تقارير الموظفين التابعين لكل مشرف عن طريق اختيار المشرف أولاً
+          </Typography>
+        </Box>
+      )}
     </Layout>
   );
 };

@@ -74,16 +74,54 @@ const UserManagement: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const [usersResponse, supervisorsResponse] = await Promise.all([
-          axios.get('/api/users'),
-          axios.get('/api/users/supervisors')
-        ]);
-        
-        setUsers(usersResponse.data.users);
-        setSupervisors(supervisorsResponse.data.supervisors);
+        // Get users and supervisors more robustly
+        try {
+          // First try to get all users
+          const usersResponse = await axios.get('/api/users');
+          console.log('Users API response:', usersResponse.data);
+          
+          // Ensure we always have an array even if the API returns null/undefined
+          const usersList = usersResponse.data.users || [];
+          setUsers(usersList);
+          
+          // Important: Clear any error state if we successfully got a response
+          // regardless of whether users exist or not - this prevents showing errors
+          // when the API call itself succeeded
+          setError(null);
+          
+          // If we have users, try to get supervisors
+          // but don't show error messages for supervisors if we already have users
+          try {
+            const supervisorsResponse = await axios.get('/api/users/supervisors');
+            setSupervisors(supervisorsResponse.data.supervisors || []);
+            console.log('Supervisors loaded:', supervisorsResponse.data.supervisors);
+          } catch (supervisorError) {
+            // Just log the error but don't display it if we already have users
+            console.error('Error fetching supervisors:', supervisorError);
+            
+            // As a fallback, extract supervisors from the users list
+            const supervisorsFromUsers = usersList.filter(u => u.role === 'supervisor' || u.role === 'admin');
+            if (supervisorsFromUsers.length > 0) {
+              console.log('Using supervisors from user list:', supervisorsFromUsers);
+              setSupervisors(supervisorsFromUsers);
+            } else {
+              setSupervisors([]);
+            }
+          }
+          
+        } catch (apiError: any) {
+          console.error('Error in API calls:', apiError);
+          
+          // Only show "no users" message if there truly are no users
+          if (apiError.response?.status === 500 && (!users || users.length === 0)) {
+            setError('قد لا يوجد مستخدمين في النظام بعد. قم بإضافة مستخدم جديد لبدء استخدام النظام.');
+          } else {
+            setError(apiError.response?.data?.message || 'حدث خطأ أثناء جلب بيانات المستخدمين');
+          }
+        }
       } catch (error: any) {
-        console.error('Error fetching users:', error);
-        setError(error.response?.data?.message || 'حدث خطأ أثناء جلب بيانات المستخدمين');
+        console.error('Error in overall fetch operation:', error);
+        setError('حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى أو إضافة مستخدم جديد.');
       } finally {
         setLoading(false);
       }
@@ -119,7 +157,7 @@ const UserManagement: React.FC = () => {
     onSubmit: async (values, { resetForm }) => {
       try {
         setLoading(true);
-        setError(null);
+        setError(null); // Limpiar cualquier error previo
         
         if (values.id) {
           // Update existing user
@@ -137,7 +175,15 @@ const UserManagement: React.FC = () => {
         
         // Refresh user list
         const response = await axios.get('/api/users');
-        setUsers(response.data.users);
+        const updatedUsers = response.data.users || [];
+        setUsers(updatedUsers);
+        
+        // Make sure to clear any persistent error message
+        // since we now have at least one user
+        setError(null);
+        
+        // Log success for debugging purposes
+        console.log(`Successfully ${values.id ? 'updated' : 'created'} user. Total users: ${updatedUsers.length}`);
         
         if (values.role === 'supervisor' || values.role === 'admin') {
           const supervisorsResponse = await axios.get('/api/users/supervisors');
@@ -209,30 +255,89 @@ const UserManagement: React.FC = () => {
   };
 
   // Open assign supervisor dialog
-  const handleAssignSupervisorClick = (employee: User) => {
+  const handleAssignSupervisorClick = async (employee: User) => {
     setSelectedUser(employee);
     setAssignmentData({
       employeeId: employee.id,
       supervisorId: 0
     });
-    setAssignSupervisorDialogOpen(true);
+    
+    // Try to get supervisors before opening dialog to avoid errors
+    try {
+      setLoading(true);
+      console.log('Fetching supervisors before opening assignment dialog...');
+      
+      // Extract supervisors directly from current users instead of making another API call
+      const availableSupervisors = users.filter(u => 
+        (u.role === 'supervisor' || u.role === 'admin') && u.id !== employee.id
+      );
+      
+      if (availableSupervisors.length > 0) {
+        console.log('Using supervisors from current users:', availableSupervisors);
+        setSupervisors(availableSupervisors);
+      } else {
+        // Try API call as fallback
+        try {
+          const supervisorsResponse = await axios.get('/api/users/supervisors');
+          const supervisorsList = supervisorsResponse.data.supervisors.filter((s: User) => s.id !== employee.id) || [];
+          console.log('Fetched supervisors from API:', supervisorsList);
+          setSupervisors(supervisorsList);
+        } catch (error) {
+          console.error('Failed to fetch supervisors from API:', error);
+          // Continue with empty supervisors - we'll show a message in the dialog
+        }
+      }
+    } catch (error) {
+      console.error('Error preparing supervisor assignment:', error);
+    } finally {
+      setLoading(false);
+      setAssignSupervisorDialogOpen(true);
+    }
   };
 
   // Assign supervisor to employee
   const handleAssignSupervisor = async () => {
+    if (!assignmentData.supervisorId || !assignmentData.employeeId) {
+      alert('الرجاء اختيار مشرف أولاً');
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
       
-      await axios.post('/api/users/assign-supervisor', assignmentData);
+      console.log('Assigning supervisor:', assignmentData);
+      // Send the assignment request to the server
+      const assignResponse = await axios.post('/api/users/assign-supervisor', assignmentData);
+      console.log('Assignment response:', assignResponse.data);
       
+      // Refresh user list to show updated assignment
+      const response = await axios.get('/api/users');
+      setUsers(response.data.users || []);
+      
+      // Refresh supervisors list
+      try {
+        const supervisorsResponse = await axios.get('/api/users/supervisors');
+        setSupervisors(supervisorsResponse.data.supervisors || []);
+      } catch (supervisorError) {
+        console.error('Error refreshing supervisors after assignment:', supervisorError);
+      }
+      
+      // Show success message
+      alert('تم تعيين المشرف بنجاح'); // Simple success message
+      
+      // Close dialog and reset selection
       setAssignSupervisorDialogOpen(false);
       setSelectedUser(null);
+      setAssignmentData({
+        employeeId: 0,
+        supervisorId: 0
+      });
       
-      // Show success message or refresh data if needed
     } catch (error: any) {
       console.error('Error assigning supervisor:', error);
       setError(error.response?.data?.message || 'حدث خطأ أثناء تعيين المشرف');
+      alert('حدث خطأ أثناء تعيين المشرف: ' + (error.response?.data?.message || 'خطأ غير معروف')); // Show detailed error to user
     } finally {
       setLoading(false);
     }
@@ -263,58 +368,85 @@ const UserManagement: React.FC = () => {
         </Button>
       </Box>
 
-      {error && (
+      {/* Only show error in very specific circumstances */}
+      {error && users.length === 0 && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
       )}
+      
+      {/* Show informational message when there are users but no supervisors */}
+      {users.length > 0 && supervisors.length === 0 && !users.some(user => user.role === 'supervisor' || user.role === 'admin') && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          تم العثور على المستخدمين، ولكن لم يتم العثور على أي مشرفين. قد تحتاج إلى إضافة مستخدمين بدور "مشرف" أو "مدير النظام".
+        </Alert>
+      )}
 
-      <Paper sx={{ p: 2 }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>اسم المستخدم</TableCell>
-                <TableCell>الاسم الكامل</TableCell>
-                <TableCell>الدور</TableCell>
-                <TableCell>الهاتف</TableCell>
-                <TableCell>الإجراءات</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.username}</TableCell>
-                  <TableCell>{user.full_name}</TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={user.role === 'admin' ? 'مدير النظام' : 
-                             user.role === 'supervisor' ? 'مشرف' : 'موظف'} 
-                      color={user.role === 'admin' ? 'secondary' : 
-                             user.role === 'supervisor' ? 'primary' : 'default'} 
-                      size="small" 
-                    />
-                  </TableCell>
-                  <TableCell>{user.phone || '-'}</TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => handleEditUser(user)} size="small">
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    {user.role === 'employee' && (
-                      <IconButton onClick={() => handleAssignSupervisorClick(user)} size="small">
-                        <SupervisorAccountIcon fontSize="small" />
-                      </IconButton>
-                    )}
-                    <IconButton onClick={() => handleDeleteClick(user)} size="small" color="error">
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
+      {users.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" gutterBottom color="textSecondary">
+            لا يوجد مستخدمين حاليًا
+          </Typography>
+          <Typography variant="body1" paragraph color="textSecondary">
+            يبدو أنه لا يوجد مستخدمين في النظام بعد. قم بإضافة مستخدم جديد لبدء استخدام النظام.
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={handleAddUser}
+            sx={{ mt: 2 }}
+          >
+            إضافة مستخدم جديد الآن
+          </Button>
+        </Paper>
+      ) : (
+        <Paper sx={{ p: 2 }}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>اسم المستخدم</TableCell>
+                  <TableCell>الاسم الكامل</TableCell>
+                  <TableCell>الدور</TableCell>
+                  <TableCell>الهاتف</TableCell>
+                  <TableCell>الإجراءات</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+              </TableHead>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>{user.username}</TableCell>
+                    <TableCell>{user.full_name}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={user.role === 'admin' ? 'مدير النظام' : 
+                               user.role === 'supervisor' ? 'مشرف' : 'موظف'} 
+                        color={user.role === 'admin' ? 'secondary' : 
+                               user.role === 'supervisor' ? 'primary' : 'default'} 
+                        size="small" 
+                      />
+                    </TableCell>
+                    <TableCell>{user.phone || '-'}</TableCell>
+                    <TableCell>
+                      <IconButton onClick={() => handleEditUser(user)} size="small">
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      {user.role === 'employee' && (
+                        <IconButton onClick={() => handleAssignSupervisorClick(user)} size="small">
+                          <SupervisorAccountIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                      <IconButton onClick={() => handleDeleteClick(user)} size="small" color="error">
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
 
       {/* Add/Edit User Dialog */}
       <Dialog open={userFormOpen} onClose={() => setUserFormOpen(false)} maxWidth="sm" fullWidth>
@@ -457,41 +589,51 @@ const UserManagement: React.FC = () => {
       >
         <DialogTitle>تعيين مشرف</DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
-            اختر مشرفًا للموظف "{selectedUser?.full_name}"
-          </DialogContentText>
-          <FormControl fullWidth>
-            <InputLabel id="supervisor-label">المشرف</InputLabel>
-            <Select
-              labelId="supervisor-label"
-              value={assignmentData.supervisorId}
-              onChange={(e) => setAssignmentData({
-                ...assignmentData,
-                supervisorId: e.target.value as number
-              })}
-              label="المشرف"
-            >
-              {supervisors.map(supervisor => (
-                <MenuItem key={supervisor.id} value={supervisor.id}>
-                  {supervisor.full_name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          {supervisors.length > 0 ? (
+            <>
+              <DialogContentText sx={{ mb: 2 }}>
+                اختر مشرفًا للموظف "{selectedUser?.full_name}"
+              </DialogContentText>
+              <FormControl fullWidth>
+                <InputLabel id="supervisor-label">المشرف</InputLabel>
+                <Select
+                  labelId="supervisor-label"
+                  value={assignmentData.supervisorId}
+                  onChange={(e) => setAssignmentData({
+                    ...assignmentData,
+                    supervisorId: e.target.value as number
+                  })}
+                  label="المشرف"
+                >
+                  {supervisors.map(supervisor => (
+                    <MenuItem key={supervisor.id} value={supervisor.id}>
+                      {supervisor.full_name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </>
+          ) : (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              لا يوجد مشرفين متاحين. يرجى إضافة مستخدمين بدور "مشرف" أو "مدير نظام" أولاً.
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAssignSupervisorDialogOpen(false)}>إلغاء</Button>
-          <Button 
-            onClick={handleAssignSupervisor} 
-            variant="contained"
-            disabled={!assignmentData.supervisorId || loading}
-          >
-            {loading ? <CircularProgress size={24} /> : 'تعيين'}
-          </Button>
+          {supervisors.length > 0 && (
+            <Button 
+              onClick={handleAssignSupervisor} 
+              variant="contained"
+              disabled={!assignmentData.supervisorId || loading}
+            >
+              {loading ? <CircularProgress size={24} /> : 'تعيين'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Layout>
   );
 };
 
-export default UserManagement; 
+export default UserManagement;
