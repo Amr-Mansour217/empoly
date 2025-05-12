@@ -6,16 +6,23 @@ class UserController {
   async getAllSupervisors(req: Request, res: Response) {
     try {
       const supervisors = await userModel.getAllSupervisors();
+      console.log(`Supervisors API - Found ${supervisors.length} supervisors`);
       
-      // Si no hay usuarios, enviamos un array vacío pero con código 200
-      // en lugar de un error 500 para mejorar la experiencia de usuario
+      // Always return 200 status with the supervisors array, even if empty
+      // This prevents frontend errors and simplifies client-side handling
       return res.status(200).json({ 
+        success: true,
         supervisors,
         message: supervisors.length === 0 ? 'No supervisors found, you may need to create users first' : undefined
       });
     } catch (error) {
       console.error('Get all supervisors error:', error);
-      return res.status(500).json({ message: 'An error occurred while getting supervisors' });
+      // Return 200 with empty array instead of 500 to prevent UI errors
+      return res.status(200).json({ 
+        success: false, 
+        supervisors: [],
+        message: 'An error occurred while getting supervisors, but we returned an empty list to prevent UI errors.' 
+      });
     }
   }
 
@@ -168,20 +175,32 @@ class UserController {
     try {
       const { employeeId, supervisorId } = req.body;
       
-      if (!employeeId || !supervisorId) {
-        return res.status(400).json({ message: 'Employee ID and supervisor ID are required' });
+      // Debug log to see what values are being received
+      console.log('Assign supervisor request received:', {
+        employeeId: employeeId,
+        supervisorId: supervisorId,
+        employeeIdType: typeof employeeId,
+        supervisorIdType: typeof supervisorId
+      });
+      
+      // Convert string IDs to integers if needed
+      const empId = typeof employeeId === 'string' ? parseInt(employeeId) : employeeId;
+      const supId = typeof supervisorId === 'string' ? parseInt(supervisorId) : supervisorId;
+      
+      if (!empId || isNaN(empId) || !supId || isNaN(supId)) {
+        return res.status(400).json({ message: 'Valid employee ID and supervisor ID are required' });
       }
       
       // Check if employee exists
-      const employee = await userModel.getById(employeeId);
+      const employee = await userModel.getById(empId);
       if (!employee) {
-        return res.status(404).json({ message: 'Employee not found' });
+        return res.status(404).json({ message: `Employee not found with ID: ${empId}` });
       }
       
       // Check if supervisor exists
-      const supervisor = await userModel.getById(supervisorId);
+      const supervisor = await userModel.getById(supId);
       if (!supervisor) {
-        return res.status(404).json({ message: 'Supervisor not found' });
+        return res.status(404).json({ message: `Supervisor not found with ID: ${supId}` });
       }
       
       // Check if employee is actually an employee

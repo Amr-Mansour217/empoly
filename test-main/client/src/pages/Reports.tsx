@@ -122,11 +122,11 @@ const Reports: React.FC = () => {
       setError(null);
       setDebugInfo(null);
       
-      console.log('Fetching supervisors...');
+      console.log('Fetching users to extract supervisors...');
       
-      // محاولة استخدام المسار المخصص للمشرفين أولاً
+      // استخدام قائمة المستخدمين للحصول على المشرفين بدلًا من API المخصص
       try {
-        const response = await axios.get('/api/users/supervisors', {
+        const response = await axios.get('/api/users', {
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
@@ -134,11 +134,16 @@ const Reports: React.FC = () => {
           timeout: 10000
         });
         
-        logResponseInfo(response, 'Supervisors API');
+        logResponseInfo(response, 'Users API for supervisors');
         
-        if (response.data && Array.isArray(response.data.supervisors)) {
-          setSupervisors(response.data.supervisors);
-          if (response.data.supervisors.length === 0) {
+        if (response.data && Array.isArray(response.data.users)) {
+          // استخراج المشرفين من قائمة المستخدمين
+          const supervisorsList = response.data.users.filter(
+            (user: any) => user.role === 'supervisor' || user.role === 'admin'
+          );
+          setSupervisors(supervisorsList);
+          
+          if (supervisorsList.length === 0) {
             console.warn('No supervisors returned from specific API');
           }
           return; // نجحت العملية، نخرج من الدالة هنا

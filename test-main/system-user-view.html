@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>رابط مباشر لعرض بيانات المستخدمين</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      direction: rtl;
+      text-align: center;
+      padding: 50px;
+      margin: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 30px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 30px;
+    }
+    .btn {
+      display: inline-block;
+      background-color: #4CAF50;
+      color: white;
+      font-size: 18px;
+      padding: 15px 30px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      text-decoration: none;
+      margin: 10px;
+      transition: background-color 0.3s;
+    }
+    .btn:hover {
+      background-color: #45a049;
+    }
+    .blue-btn {
+      background-color: #2196F3;
+    }
+    .blue-btn:hover {
+      background-color: #0b7dda;
+    }
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>رابط مباشر لعرض بيانات المستخدمين</h1>
+    <p>يمكنك استخدام الرابط التالي للوصول إلى واجهة عرض بيانات المستخدمين مباشرة من قاعدة البيانات:</p>
+    
+    <div>
+      <a href="/db-viewer" class="btn">عرض بيانات المستخدمين</a>
+    </div>
+    
+    <p style="margin-top: 30px;">أو يمكنك استخدام الرابط التالي لعرض البيانات مباشرة من الـ API:</p>
+    
+    <div>
+      <a href="/api/debug/view-users" class="btn blue-btn">عرض البيانات من API</a>
+    </div>
+  </div>
+</body>
+</html>

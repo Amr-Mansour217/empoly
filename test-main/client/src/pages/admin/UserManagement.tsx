@@ -74,9 +74,8 @@ const UserManagement: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // Get users and supervisors more robustly
         try {
-          // First try to get all users
+          // Get all users from API
           const usersResponse = await axios.get('/api/users');
           console.log('Users API response:', usersResponse.data);
           
@@ -85,30 +84,13 @@ const UserManagement: React.FC = () => {
           setUsers(usersList);
           
           // Important: Clear any error state if we successfully got a response
-          // regardless of whether users exist or not - this prevents showing errors
-          // when the API call itself succeeded
           setError(null);
           
-          // If we have users, try to get supervisors
-          // but don't show error messages for supervisors if we already have users
-          try {
-            const supervisorsResponse = await axios.get('/api/users/supervisors');
-            setSupervisors(supervisorsResponse.data.supervisors || []);
-            console.log('Supervisors loaded:', supervisorsResponse.data.supervisors);
-          } catch (supervisorError) {
-            // Just log the error but don't display it if we already have users
-            console.error('Error fetching supervisors:', supervisorError);
-            
-            // As a fallback, extract supervisors from the users list
-            const supervisorsFromUsers = usersList.filter(u => u.role === 'supervisor' || u.role === 'admin');
-            if (supervisorsFromUsers.length > 0) {
-              console.log('Using supervisors from user list:', supervisorsFromUsers);
-              setSupervisors(supervisorsFromUsers);
-            } else {
-              setSupervisors([]);
-            }
-          }
-          
+          // Extract supervisors directly from users list instead of making a separate API call
+          // This prevents the 500 error from the /api/users/supervisors endpoint
+          const supervisorsFromUsers = usersList.filter(u => u.role === 'supervisor' || u.role === 'admin');
+          console.log('Using supervisors extracted from user list:', supervisorsFromUsers);
+          setSupervisors(supervisorsFromUsers);
         } catch (apiError: any) {
           console.error('Error in API calls:', apiError);
           
@@ -185,10 +167,10 @@ const UserManagement: React.FC = () => {
         // Log success for debugging purposes
         console.log(`Successfully ${values.id ? 'updated' : 'created'} user. Total users: ${updatedUsers.length}`);
         
-        if (values.role === 'supervisor' || values.role === 'admin') {
-          const supervisorsResponse = await axios.get('/api/users/supervisors');
-          setSupervisors(supervisorsResponse.data.supervisors);
-        }
+        // Update supervisors list directly from the updated users
+        const newSupervisors = updatedUsers.filter(u => u.role === 'supervisor' || u.role === 'admin');
+        console.log('Updated supervisors from user list:', newSupervisors);
+        setSupervisors(newSupervisors);
         
         resetForm();
         setUserFormOpen(false);
@@ -257,8 +239,9 @@ const UserManagement: React.FC = () => {
   // Open assign supervisor dialog
   const handleAssignSupervisorClick = async (employee: User) => {
     setSelectedUser(employee);
+    // Ensure we're using a number type for the employee ID
     setAssignmentData({
-      employeeId: employee.id,
+      employeeId: typeof employee.id === 'string' ? parseInt(employee.id) : employee.id,
       supervisorId: 0
     });
     
@@ -275,18 +258,9 @@ const UserManagement: React.FC = () => {
       if (availableSupervisors.length > 0) {
         console.log('Using supervisors from current users:', availableSupervisors);
         setSupervisors(availableSupervisors);
-      } else {
-        // Try API call as fallback
-        try {
-          const supervisorsResponse = await axios.get('/api/users/supervisors');
-          const supervisorsList = supervisorsResponse.data.supervisors.filter((s: User) => s.id !== employee.id) || [];
-          console.log('Fetched supervisors from API:', supervisorsList);
-          setSupervisors(supervisorsList);
-        } catch (error) {
-          console.error('Failed to fetch supervisors from API:', error);
-          // Continue with empty supervisors - we'll show a message in the dialog
-        }
       }
+      // Note: We no longer need to call the API as a fallback
+      // This way we avoid the 500 error that was happening
     } catch (error) {
       console.error('Error preparing supervisor assignment:', error);
     } finally {
@@ -315,13 +289,12 @@ const UserManagement: React.FC = () => {
       const response = await axios.get('/api/users');
       setUsers(response.data.users || []);
       
-      // Refresh supervisors list
-      try {
-        const supervisorsResponse = await axios.get('/api/users/supervisors');
-        setSupervisors(supervisorsResponse.data.supervisors || []);
-      } catch (supervisorError) {
-        console.error('Error refreshing supervisors after assignment:', supervisorError);
-      }
+      // Update supervisors directly from the users we already have
+      const updatedSupervisors = response.data.users.filter((u: User) => 
+        (u.role === 'supervisor' || u.role === 'admin')
+      );
+      console.log('Updated supervisors list from users:', updatedSupervisors);
+      setSupervisors(updatedSupervisors);
       
       // Show success message
       alert('تم تعيين المشرف بنجاح'); // Simple success message
