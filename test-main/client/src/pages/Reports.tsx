@@ -62,7 +62,7 @@ const Reports: React.FC = () => {
   const [filters, setFilters] = useState({
     startDate: weekAgo,
     endDate: today,
-    activityType: 'all',
+    selectedEmployee: 'all', // بدلا من activityType
   });
 
   // تحميل البيانات المناسبة عند تحميل الصفحة أو تغيير المستخدم
@@ -127,7 +127,7 @@ const Reports: React.FC = () => {
       
       // استخدام قائمة المستخدمين للحصول على المشرفين بدلًا من API المخصص
       try {
-        const response = await axios.get('/api/users', {
+        const response = await axios.get('https://elmanafea.online/api/users', {
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
@@ -155,7 +155,7 @@ const Reports: React.FC = () => {
       }
       
       // طريقة بديلة: استدعاء جميع المستخدمين ثم تصفية المشرفين والمدراء
-      const response = await axios.get('/api/users', {
+      const response = await axios.get('https://elmanafea.online/api/users', {
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
@@ -217,7 +217,7 @@ const Reports: React.FC = () => {
       }
       
       console.log(`Fetching reports with params: ${params.toString()}`);
-      const response = await axios.get(`/api/reports?${params.toString()}`);
+      const response = await axios.get(`https://elmanafea.online/api/reports?${params.toString()}`);
       console.log('Reports response:', response.data);
       
       if (response.data && Array.isArray(response.data.reports)) {
@@ -262,10 +262,10 @@ const Reports: React.FC = () => {
     );
   }
 
-  // Filter reports by activity type if selected
-  const filteredReports = filters.activityType === 'all' 
+  // Filter reports by selected employee if one is selected
+  const filteredReports = filters.selectedEmployee === 'all' 
     ? reports 
-    : reports.filter(report => report.activity_name === filters.activityType);
+    : reports.filter(report => report.employee_id.toString() === filters.selectedEmployee);
 
   return (
     <Layout title="التقارير">
@@ -387,19 +387,21 @@ const Reports: React.FC = () => {
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <FormControl fullWidth>
-              <InputLabel id="activity-type-label">نوع النشاط</InputLabel>
+              <InputLabel id="employee-select-label">الموظف</InputLabel>
               <Select
-                labelId="activity-type-label"
-                id="activityType"
-                name="activityType"
-                value={filters.activityType}
+                labelId="employee-select-label"
+                id="selectedEmployee"
+                name="selectedEmployee"
+                value={filters.selectedEmployee}
                 onChange={handleFilterChange}
-                label="نوع النشاط"
+                label="الموظف"
               >
-                <MenuItem value="all">جميع الأنشطة</MenuItem>
-                {Array.from(new Set(reports.map(report => report.activity_name))).map(activity => (
-                  <MenuItem key={activity} value={activity}>
-                    {activity}
+                <MenuItem value="all">جميع الموظفين</MenuItem>
+                {Array.from(
+                  new Map(reports.map(report => [report.employee_id, report.full_name])).entries()
+                ).map(([id, name]) => (
+                  <MenuItem key={id} value={id.toString()}>
+                    {name}
                   </MenuItem>
                 ))}
               </Select>
@@ -435,9 +437,8 @@ const Reports: React.FC = () => {
                 <TableRow>
                   <TableCell>التاريخ</TableCell>
                   <TableCell>الموظف</TableCell>
-                  <TableCell>نوع النشاط</TableCell>
                   <TableCell>عدد المستفيدين</TableCell>
-                  <TableCell>الموقع</TableCell>
+                  <TableCell>النشاط</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -445,14 +446,10 @@ const Reports: React.FC = () => {
                   <TableRow key={`${report.employee_id}-${report.report_date}`}>
                     <TableCell>{format(new Date(report.report_date), 'yyyy/MM/dd')}</TableCell>
                     <TableCell>{report.full_name}</TableCell>
+                    <TableCell>{report.has_submitted ? report.beneficiaries_count : '-'}</TableCell>
                     <TableCell>
-                      {report.has_submitted ? (
-                        <Chip 
-                          label={report.activity_name} 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined"
-                        />
+                      {report.has_submitted && report.location ? (
+                        report.location
                       ) : (
                         <Chip 
                           label="لم يتم تقديم تقرير" 
@@ -462,8 +459,6 @@ const Reports: React.FC = () => {
                         />
                       )}
                     </TableCell>
-                    <TableCell>{report.has_submitted ? report.beneficiaries_count : '-'}</TableCell>
-                    <TableCell>{report.has_submitted && report.location ? report.location : '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -524,4 +519,4 @@ const Reports: React.FC = () => {
   );
 };
 
-export default Reports; 
+export default Reports;

@@ -204,7 +204,7 @@ const AdminDashboard: React.FC = () => {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell>نوع النشاط</TableCell>
+                      <TableCell>النشاط</TableCell>
                       <TableCell>عدد المرات</TableCell>
                       <TableCell>عدد المستفيدين</TableCell>
                     </TableRow>

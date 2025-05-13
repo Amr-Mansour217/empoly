@@ -45,7 +45,7 @@ const Profile: React.FC = () => {
         setError(null);
         setSuccess(false);
         
-        await axios.post('/api/auth/change-password', {
+        await axios.post('https://elmanafea.online/api/auth/change-password', {
           currentPassword: values.currentPassword,
           newPassword: values.newPassword,
         });
@@ -169,4 +169,4 @@ const Profile: React.FC = () => {
   );
 };
 
-export default Profile; 
+export default Profile;

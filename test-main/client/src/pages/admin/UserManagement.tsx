@@ -24,7 +24,9 @@ import {
   MenuItem,
   Grid,
   Chip,
-  IconButton
+  IconButton,
+  Snackbar,
+  AlertColor
 } from '@mui/material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
@@ -68,6 +70,11 @@ const UserManagement: React.FC = () => {
   });
   // Track supervisor assignments for each employee
   const [employeeSupervisors, setEmployeeSupervisors] = useState<Record<number, User>>({});
+  
+  // Notification states
+  const [notificationOpen, setNotificationOpen] = useState<boolean>(false);
+  const [notificationMessage, setNotificationMessage] = useState<string>('');
+  const [notificationSeverity, setNotificationSeverity] = useState<AlertColor>('success');
 
   // Fetch users and supervisors
   useEffect(() => {
@@ -78,7 +85,7 @@ const UserManagement: React.FC = () => {
         
         try {
           // Get all users from API
-          const usersResponse = await axios.get('/api/users');
+          const usersResponse = await axios.get('https://elmanafea.online/api/users');
           console.log('Users API response:', usersResponse.data);
           
           // Ensure we always have an array even if the API returns null/undefined
@@ -102,7 +109,7 @@ const UserManagement: React.FC = () => {
           
           // First try to fetch from employee_supervisors directly using a custom endpoint
           try {
-            const allAssignmentsResponse = await axios.get('/api/users/all-supervisor-assignments');
+            const allAssignmentsResponse = await axios.get('https://elmanafea.online/api/users/all-supervisor-assignments');
             if (allAssignmentsResponse.data && allAssignmentsResponse.data.assignments) {
               console.log('Fetched all supervisor assignments at once:', allAssignmentsResponse.data);
               
@@ -123,7 +130,7 @@ const UserManagement: React.FC = () => {
               employees.map(async (employee) => {
                 try {
                   console.log(`Fetching supervisor for employee ID ${employee.id}...`);
-                  const response = await axios.get(`/api/users/${employee.id}/supervisor`);
+                  const response = await axios.get(`https://elmanafea.online/api/users/${employee.id}/supervisor`);
                   if (response.data && response.data.supervisor) {
                     console.log(`Found supervisor for employee ${employee.id}:`, response.data.supervisor);
                     supervisorMap[employee.id] = response.data.supervisor;
@@ -160,6 +167,23 @@ const UserManagement: React.FC = () => {
     fetchData();
   }, []);
 
+  // Function to show notification
+  const showNotification = (message: string, severity: AlertColor = 'success') => {
+    setNotificationMessage(message);
+    setNotificationSeverity(severity);
+    setNotificationOpen(true);
+    
+    // Auto hide after 3 seconds
+    setTimeout(() => {
+      setNotificationOpen(false);
+    }, 3000);
+  };
+  
+  // Handle closing notification
+  const handleNotificationClose = () => {
+    setNotificationOpen(false);
+  };
+
   // User form handling
   const userFormik = useFormik({
     initialValues: {
@@ -194,7 +218,7 @@ const UserManagement: React.FC = () => {
 
         if (values.id) {
           // Update existing user
-          await axios.post(`/api/users/${values.id}`, {
+          await axios.post(`https://elmanafea.online/api/users/${values.id}`, {
             full_name: values.full_name,
             phone: values.phone || null,
             nationality: values.nationality || null,
@@ -203,7 +227,7 @@ const UserManagement: React.FC = () => {
           });
         } else {
           // Create new user
-          const registerResponse = await axios.post('/api/auth/register', {
+          const registerResponse = await axios.post('https://elmanafea.online/api/auth/register', {
             username: values.username,
             password: values.password,
             full_name: values.full_name,
@@ -224,7 +248,7 @@ const UserManagement: React.FC = () => {
         // Supervisor assignment during user creation has been removed since the supervisor dropdown was removed
         
         // Refresh user list
-        const response = await axios.get('/api/users');
+        const response = await axios.get('https://elmanafea.online/api/users');
         const updatedUsers = response.data.users || [];
         setUsers(updatedUsers);
         
@@ -245,7 +269,7 @@ const UserManagement: React.FC = () => {
         // Force refresh all supervisor assignments after user creation/update
         try {
           // Load all supervisor assignments to ensure everything is in sync
-          const allAssignmentsResponse = await axios.get('/api/users/all-supervisor-assignments');
+          const allAssignmentsResponse = await axios.get('https://elmanafea.online/api/users/all-supervisor-assignments');
           if (allAssignmentsResponse.data && allAssignmentsResponse.data.assignments) {
             const assignments = allAssignmentsResponse.data.assignments;
             console.log('All supervisor assignments after user action:', assignments);
@@ -272,9 +296,15 @@ const UserManagement: React.FC = () => {
         
         resetForm();
         setUserFormOpen(false);
+        
+        // Show success notification
+        showNotification(values.id ? 'تم تحديث المستخدم بنجاح' : 'تم إضافة المستخدم بنجاح', 'success');
       } catch (error: any) {
         console.error('Error saving user:', error);
         setError(error.response?.data?.message || 'حدث خطأ أثناء حفظ بيانات المستخدم');
+        
+        // Show error notification
+        showNotification('حدث خطأ أثناء حفظ بيانات المستخدم', 'error');
       } finally {
         setLoading(false);
       }
@@ -315,7 +345,7 @@ const UserManagement: React.FC = () => {
         // Option 2: Try fetching from API as a fallback
         try {
           console.log('No supervisors in current users list, fetching from API...');
-          const supervisorsResponse = await axios.get('/api/users/supervisors');
+          const supervisorsResponse = await axios.get('https://elmanafea.online/api/users/supervisors');
           if (supervisorsResponse.data && supervisorsResponse.data.supervisors) {
             console.log('Fetched supervisors from API:', supervisorsResponse.data.supervisors);
             setSupervisors(supervisorsResponse.data.supervisors);
@@ -364,7 +394,7 @@ const UserManagement: React.FC = () => {
         }
         
         // Fetch the employee's supervisor if they have one
-        const supervisorResponse = await axios.get(`/api/users/${user.id}/supervisor`);
+        const supervisorResponse = await axios.get(`https://elmanafea.online/api/users/${user.id}/supervisor`);
         if (supervisorResponse.data && supervisorResponse.data.supervisor) {
           console.log('Found supervisor for employee:', supervisorResponse.data.supervisor);
           
@@ -390,14 +420,24 @@ const UserManagement: React.FC = () => {
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
     
+    // إذا كان المستخدم من نوع "admin" (مدير نظام)، تحقق إذا كان آخر مدير نظام متوفر
+    if (selectedUser.role === 'admin') {
+      const adminUsers = users.filter(u => u.role === 'admin');
+      if (adminUsers.length <= 1) {
+        setError('لا يمكن حذف آخر مدير نظام! يجب أن يكون هناك مدير واحد على الأقل في النظام.');
+        setLoading(false);
+        return;
+      }
+    }
+    
     try {
       setLoading(true);
       setError(null);
       
-      await axios.delete(`/api/users/${selectedUser.id}`);
+      await axios.delete(`https://elmanafea.online/api/users/${selectedUser.id}`);
       
       // Refresh user list
-      const response = await axios.get('/api/users');
+      const response = await axios.get('https://elmanafea.online/api/users');
       setUsers(response.data.users);
       
       setDeleteDialogOpen(false);
@@ -468,13 +508,14 @@ const UserManagement: React.FC = () => {
       
       console.log('Assigning supervisor:', assignmentData);
       // Send the assignment request to the server
-      const assignResponse = await axios.post('http://localhost:5001/test/supervisor-assign', assignmentData);
+      const assignResponse = await axios.post('https://elmanafea.online/test/supervisor-assign', assignmentData);
       
       console.log('Assignment response:', assignResponse.data);
       
       // Refresh user list to show updated assignment
-      const response = await axios.get('/api/users');
-      setUsers(response.data.users || []);
+      const response = await axios.get('https://elmanafea.online/api/users');
+      const updatedUsers = response.data.users || [];
+      setUsers(updatedUsers);
       
       // Update supervisors directly from the users we already have
       const updatedSupervisors = response.data.users.filter((u: User) => 
@@ -484,7 +525,6 @@ const UserManagement: React.FC = () => {
       setSupervisors(updatedSupervisors);
       
       // Update the employee-supervisor mapping in the local state
-      const updatedUsers = response.data.users || [];
       const assignedSupervisor = updatedUsers.find((u: User) => u.id === assignmentData.supervisorId);
       if (assignedSupervisor) {
         console.log('Updating local supervisor mapping:', {
@@ -724,7 +764,7 @@ const UserManagement: React.FC = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
                   id="nationality"
@@ -735,17 +775,7 @@ const UserManagement: React.FC = () => {
                   margin="normal"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  id="location"
-                  name="location"
-                  label="الموقع"
-                  value={userFormik.values.location}
-                  onChange={userFormik.handleChange}
-                  margin="normal"
-                />
-              </Grid>
+
               {/* Supervisor dropdown removed as requested */}
             </Grid>
           </DialogContent>
@@ -772,6 +802,13 @@ const UserManagement: React.FC = () => {
           <DialogContentText>
             هل أنت متأكد من رغبتك في حذف المستخدم "{selectedUser?.full_name}"؟
           </DialogContentText>
+          
+          {/* عرض رسالة الخطأ إذا كانت موجودة */}
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>إلغاء</Button>

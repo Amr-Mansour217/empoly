@@ -47,7 +47,7 @@ const DailyReportForm: React.FC = () => {
   useEffect(() => {
     const checkTodayReport = async () => {
       try {
-        const response = await axios.get('/api/reports/me/current');
+        const response = await axios.get('https://elmanafea.online/api/reports/me/current');
         
         if (response.data.hasSubmitted) {
           setHasSubmittedToday(true);
@@ -68,7 +68,7 @@ const DailyReportForm: React.FC = () => {
     // Fetch activity types
     const fetchActivityTypes = async () => {
       try {
-        const response = await axios.get('/api/activities');
+        const response = await axios.get('https://elmanafea.online/api/activities');
         setActivityTypes(response.data.activities);
       } catch (error) {
         console.error('Error fetching activity types:', error);
@@ -96,7 +96,7 @@ const DailyReportForm: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        await axios.post('/api/reports', {
+        await axios.post('https://elmanafea.online/api/reports', {
           activity_type_id: parseInt(values.activity_type_id),
           beneficiaries_count: parseInt(values.beneficiaries_count),
           location: values.location || null,
@@ -239,4 +239,4 @@ const DailyReportForm: React.FC = () => {
   );
 };
 
-export default DailyReportForm; 
+export default DailyReportForm;

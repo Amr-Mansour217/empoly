@@ -60,7 +60,7 @@ const EmployeeDashboard: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await axios.get('/api/dashboard/employee');
+        const response = await axios.get('https://elmanafea.online/api/dashboard/employee');
         setDashboardData(response.data);
       } catch (error: any) {
         console.error('Error fetching dashboard data:', error);
@@ -123,14 +123,14 @@ const EmployeeDashboard: React.FC = () => {
               {dashboardData?.hasSubmittedToday ? (
                 <Box>
                   <Typography variant="body1" sx={{ mb: 1 }}>
-                    <strong>نوع النشاط:</strong> {dashboardData.todayReport?.activity_name}
+
                   </Typography>
                   <Typography variant="body1" sx={{ mb: 1 }}>
                     <strong>عدد المستفيدين:</strong> {dashboardData.todayReport?.beneficiaries_count}
                   </Typography>
                   {dashboardData.todayReport?.location && (
                     <Typography variant="body1" sx={{ mb: 1 }}>
-                      <strong>الموقع:</strong> {dashboardData.todayReport?.location}
+                      <strong>النشاط:</strong> {dashboardData.todayReport?.location}
                     </Typography>
                   )}
                   <Typography variant="body2" color="text.secondary">
@@ -191,18 +191,14 @@ const EmployeeDashboard: React.FC = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell>التاريخ</TableCell>
-                      <TableCell>نوع النشاط</TableCell>
                       <TableCell>عدد المستفيدين</TableCell>
-                      <TableCell>الموقع</TableCell>
+                      <TableCell>النشاط</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {dashboardData.recentReports.map((report) => (
                       <TableRow key={report.id}>
                         <TableCell>{format(new Date(report.report_date), 'yyyy/MM/dd')}</TableCell>
-                        <TableCell>
-                          <Chip label={report.activity_name} size="small" />
-                        </TableCell>
                         <TableCell>{report.beneficiaries_count}</TableCell>
                         <TableCell>{report.location || '-'}</TableCell>
                       </TableRow>
@@ -222,4 +218,4 @@ const EmployeeDashboard: React.FC = () => {
   );
 };
 
-export default EmployeeDashboard; 
+export default EmployeeDashboard;

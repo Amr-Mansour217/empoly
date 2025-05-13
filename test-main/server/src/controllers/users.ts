@@ -1,10 +1,6 @@
-import express ,{ Request, Response } from 'express';
+import { Request, Response } from 'express';
 import userModel from '../models/user';
 import { pool } from '../config/db';
-
-const app = express();
-
-
 
 class UserController {
   // Get all supervisors
@@ -55,22 +51,15 @@ class UserController {
   // Get user by ID
   async getUserById(req: Request, res: Response) {
     try {
-      const userId = parseInt(req.params.id, 10); // Add radix parameter
-
-      // Improved validation with more descriptive error message
-      if (isNaN(userId) || userId <= 0) {
-        console.log(`Invalid user ID provided: ${req.params.id}`);
-        return res.status(400).json({ 
-          message: 'Invalid user ID', 
-          details: { providedId: req.params.id }
-        });
+      const userId = parseInt(req.params.id);
+      
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: 'Invalid user ID' });
       }
       
-      console.log(`Looking for user with ID: ${userId}`);
       const user = await userModel.getById(userId);
       
       if (!user) {
-        console.log(`User not found with ID: ${userId}`);
         return res.status(404).json({ message: 'User not found' });
       }
       
@@ -84,184 +73,65 @@ class UserController {
   // Update user
   async updateUser(req: Request, res: Response) {
     try {
-      console.log('Update user request received:', {
-        userId: req.params.id,
-        body: req.body
-      });
-      
-      const userId = parseInt(req.params.id, 10);
+      const userId = parseInt(req.params.id);
       const { full_name, phone, nationality, location, role } = req.body;
       
-      if (isNaN(userId) || userId <= 0) {
-        console.log(`Invalid user ID: ${req.params.id}`);
-        return res.status(400).json({ 
-          message: 'Invalid user ID',
-          details: { providedId: req.params.id } 
-        });
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: 'Invalid user ID' });
       }
       
-      // Check if user exists directly in database
-      try {
-        // Check if the user exists
-        const [userRows]: any = await pool.execute('SELECT * FROM users WHERE id = ?', [userId]);
-        
-        if (!userRows || userRows.length === 0) {
-          console.log(`User not found with ID: ${userId}`);
-          return res.status(404).json({ message: 'User not found' });
-        }
-        
-        const user = userRows[0];
-        console.log(`Found user:`, user);
-        
-        // Build SQL update query dynamically
-        let updates = [];
-        let params = [];
-        
-        if (full_name !== undefined && full_name !== user.full_name) {
-          updates.push('full_name = ?');
-          params.push(full_name);
-        }
-        
-        if (phone !== undefined && phone !== user.phone) {
-          updates.push('phone = ?');
-          params.push(phone);
-        }
-        
-        if (nationality !== undefined && nationality !== user.nationality) {
-          updates.push('nationality = ?');
-          params.push(nationality);
-        }
-        
-        if (location !== undefined && location !== user.location) {
-          updates.push('location = ?');
-          params.push(location);
-        }
-        
-        if (role !== undefined && role !== user.role) {
-          updates.push('role = ?');
-          params.push(role);
-        }
-        
-        // If nothing to update, return success
-        if (updates.length === 0) {
-          console.log('No changes detected, returning success');
-          return res.status(200).json({ 
-            message: 'No changes were needed',
-            success: true,
-            unchanged: true
-          });
-        }
-        
-        // Add user ID to params
-        params.push(userId);
-        
-        // Execute the update directly
-        console.log('Executing update with:', { updates, params });
-        const query = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
-        console.log('Update query:', query);
-        
-        const [updateResult]: any = await pool.execute(query, params);
-        
-        console.log('Update result:', updateResult);
-        
-        // Always assume success if we got this far
-        return res.status(200).json({ 
-          message: 'User updated successfully',
-          success: true
-        });
-        
-      } catch (dbError: any) {
-        console.error('Database error during update:', dbError);
-        return res.status(500).json({ 
-          message: 'Database error occurred during update',
-          success: false,
-          details: dbError.message
-        });
+      // Check if user exists
+      const user = await userModel.getById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
       }
-    } catch (error: any) {
-      console.error('Update user error:', error);
-      return res.status(500).json({ 
-        message: 'An error occurred while updating user',
-        error: error.message || 'Unknown error',
-        success: false
+      
+      // Update user
+      const updated = await userModel.update(userId, {
+        full_name,
+        phone,
+        nationality,
+        location,
+        role: role as 'admin' | 'supervisor' | 'employee'
       });
+      
+      if (!updated) {
+        return res.status(400).json({ message: 'No changes were made' });
+      }
+      
+      return res.status(200).json({ message: 'User updated successfully' });
+    } catch (error) {
+      console.error('Update user error:', error);
+      return res.status(500).json({ message: 'An error occurred while updating user' });
     }
   }
   
   // Delete user
   async deleteUser(req: Request, res: Response) {
     try {
-      const userId = parseInt(req.params.id, 10);
-      console.log('Delete request for user ID:', userId);
+      const userId = parseInt(req.params.id);
       
-      if (isNaN(userId) || userId <= 0) {
-        console.log(`Invalid user ID format: ${req.params.id}`);
-        return res.status(400).json({ 
-          message: 'Invalid user ID format',
-          success: false 
-        });
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: 'Invalid user ID' });
       }
       
-      // Use a simplified approach without transactions
-      try {
-        // Check if the user exists
-        const [userCheckResult]: any = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
-        
-        if (!userCheckResult || userCheckResult.length === 0) {
-          return res.status(404).json({ 
-            message: 'User not found in database',
-            success: false
-          });
-        }
-        
-        console.log(`Found user with ID ${userId}, proceeding with deletion`);
-        
-        // First remove any supervisor assignments
-        console.log('Removing supervisor assignments...');
-        await pool.execute(
-          'DELETE FROM employee_supervisors WHERE employee_id = ? OR supervisor_id = ?', 
-          [userId, userId]
-        );
-        
-        // Then delete the user
-        console.log('Deleting user...');
-        const [deleteResult]: any = await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
-        
-        console.log('Delete operation result:', deleteResult);
-        
-        // Always assume success if we got this far without errors
-        console.log(`Successfully deleted user ${userId}`);
-        return res.status(200).json({ 
-          message: 'User deleted successfully',
-          success: true 
-        });
-        
-      } catch (dbError: any) {
-        console.error('Full database error:', dbError);
-        
-        // Check for foreign key constraint violations
-        if (dbError.code === 'ER_ROW_IS_REFERENCED' || dbError.errno === 1451) {
-          return res.status(400).json({
-            message: 'Cannot delete this user because they are referenced by other records',
-            success: false
-          });
-        }
-        
-        // Return more specific error details to help diagnose the issue
-        return res.status(500).json({ 
-          message: 'Database error occurred',
-          success: false,
-          details: dbError.message,
-          code: dbError.code || dbError.errno
-        });
+      // Check if user exists
+      const user = await userModel.getById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
       }
       
-    } catch (error: any) {
+      // Delete user
+      const deleted = await userModel.delete(userId);
+      
+      if (!deleted) {
+        return res.status(500).json({ message: 'Failed to delete user' });
+      }
+      
+      return res.status(200).json({ message: 'User deleted successfully' });
+    } catch (error) {
       console.error('Delete user error:', error);
-      return res.status(500).json({ 
-        message: 'An error occurred while deleting user',
-        success: false
-      });
+      return res.status(500).json({ message: 'An error occurred while deleting user' });
     }
   }
   
@@ -298,6 +168,122 @@ class UserController {
     } catch (error) {
       console.error('Get employees by supervisor error:', error);
       return res.status(500).json({ message: 'An error occurred while getting employees' });
+    }
+  }
+  
+  // Assign supervisor to employee
+  async assignSupervisor(req: Request, res: Response) {
+    try {
+      const { employeeId, supervisorId } = req.body;
+      
+      // Enhanced debug logging to trace the exact execution path
+      console.log('Assign supervisor request received:', {
+        employeeId,
+        supervisorId,
+        bodyKeys: Object.keys(req.body),
+        fullBody: JSON.stringify(req.body)
+      });
+      
+      // Check if the required parameters are present
+      if (employeeId === undefined) {
+        console.log('Missing employeeId in request');
+        return res.status(400).json({ 
+          message: 'Missing employee ID',
+          errorCode: 'EMPLOYEE_ID_MISSING'
+        });
+      }
+      
+      if (supervisorId === undefined) {
+        console.log('Missing supervisorId in request');
+        return res.status(400).json({ 
+          message: 'Missing supervisor ID',
+          errorCode: 'SUPERVISOR_ID_MISSING'
+        });
+      }
+      
+      // Improved ID parsing handling
+      const empId = typeof employeeId === 'string' ? parseInt(employeeId) : employeeId;
+      const supId = typeof supervisorId === 'string' ? parseInt(supervisorId) : supervisorId;
+      
+      
+      // Validate the parsed IDs are valid numbers
+      if (isNaN(empId) || !empId) {
+        console.log('Invalid employee ID after parsing:', { employeeId, empId });
+        return res.status(400).json({ 
+          message: 'Invalid employee ID format',
+          errorCode: 'EMPLOYEE_ID_INVALID',
+          details: { providedValue: employeeId }
+        });
+      }
+      
+      if (isNaN(supId) || !supId) {
+        console.log('Invalid supervisor ID after parsing:', { supervisorId, supId });
+        return res.status(400).json({ 
+          message: 'Invalid supervisor ID format',
+          errorCode: 'SUPERVISOR_ID_INVALID',
+          details: { providedValue: supervisorId }
+        });
+      }
+      
+      // تأكد من أن المعرفات أرقام موجبة
+      if (empId <= 0 || supId <= 0) {
+        return res.status(400).json({ 
+          message: 'Employee and supervisor IDs must be positive numbers',
+          details: {
+            parsedEmployeeId: empId,
+            parsedSupervisorId: supId
+          }
+        });
+      }
+      
+      console.log(`Checking if employee exists with ID: ${empId} (${typeof empId})`);
+      // Check if employee exists
+      const employee = await userModel.getById(empId);
+      if (!employee) {
+        console.log(`Employee not found with ID: ${empId}`);
+        return res.status(404).json({ 
+          message: `Employee not found with ID: ${empId}`,
+          errorCode: 'EMPLOYEE_NOT_FOUND'
+        });
+      }
+      console.log(`Found employee:`, employee);
+      
+      console.log(`Checking if supervisor exists with ID: ${supId} (${typeof supId})`);
+      // Check if supervisor exists
+      const supervisor = await userModel.getById(supId);
+      if (!supervisor) {
+        console.log(`Supervisor not found with ID: ${supId}`);
+        return res.status(404).json({ 
+          message: `Supervisor not found with ID: ${supId}`,
+          errorCode: 'SUPERVISOR_NOT_FOUND'
+        });
+      }
+      console.log(`Found supervisor:`, supervisor);
+      
+      // Check if employee is actually an employee
+      if (employee.role !== 'employee') {
+        return res.status(400).json({ message: 'User is not an employee' });
+      }
+      
+      // Check if supervisor is actually a supervisor or admin
+      if (supervisor.role !== 'supervisor' && supervisor.role !== 'admin') {
+        return res.status(400).json({ message: 'User is not a supervisor or admin' });
+      }
+      
+      // Assign supervisor - استخدام القيم المحولة بدلاً من القيم الأصلية
+      const assigned = await userModel.assignSupervisor(empId, supId);
+      
+      if (!assigned) {
+        return res.status(500).json({ message: 'Failed to assign supervisor' });
+      }
+      
+      return res.status(200).json({ message: 'Supervisor assigned successfully' });
+    } catch (error) {
+      console.error('Assign supervisor error:', error);
+      return res.status(500).json({ 
+        message: 'An error occurred while assigning supervisor',
+        errorCode: 'INTERNAL_SERVER_ERROR'
+      });
     }
   }
   

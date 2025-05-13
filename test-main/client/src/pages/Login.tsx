@@ -18,7 +18,6 @@ import { Navigate } from 'react-router-dom';
 
 const Login: React.FC = () => {
   const { login, error, clearError, isAuthenticated, isLoading, user } = useAuth();
-  const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [networkError, setNetworkError] = useState<string | null>(null);
 
   // Redirect if already authenticated
@@ -71,27 +70,6 @@ const Login: React.FC = () => {
             <Alert severity="error" sx={{ mb: 2 }} onClose={clearError}>
               <AlertTitle>خطأ في تسجيل الدخول</AlertTitle>
               {error}
-              <Box sx={{ mt: 1 }}>
-                <Button 
-                  size="small" 
-                  color="inherit" 
-                  onClick={() => setShowDebugInfo(!showDebugInfo)}
-                >
-                  {showDebugInfo ? 'إخفاء معلومات التصحيح' : 'عرض معلومات التصحيح'}
-                </Button>
-              </Box>
-              {showDebugInfo && (
-                <Box sx={{ mt: 2, p: 1, bgcolor: 'rgba(0,0,0,0.04)', borderRadius: 1, fontSize: '0.75rem' }}>
-                  <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                    تلميح: يمكنك استخدام المستخدمين التجريبيين:<br />
-                    - اسم المستخدم: employee1<br />
-                    - كلمة المرور: admin123<br /><br />
-                    أو<br /><br />
-                    - اسم المستخدم: admin<br />
-                    - كلمة المرور: admin123
-                  </Typography>
-                </Box>
-              )}
             </Alert>
           )}
           
