@@ -1,5 +1,10 @@
-import { Request, Response } from 'express';
+import express ,{ Request, Response } from 'express';
 import userModel from '../models/user';
+import { pool } from '../config/db';
+
+const app = express();
+
+
 
 class UserController {
   // Get all supervisors
@@ -50,15 +55,22 @@ class UserController {
   // Get user by ID
   async getUserById(req: Request, res: Response) {
     try {
-      const userId = parseInt(req.params.id);
-      
-      if (isNaN(userId)) {
-        return res.status(400).json({ message: 'Invalid user ID' });
+      const userId = parseInt(req.params.id, 10); // Add radix parameter
+
+      // Improved validation with more descriptive error message
+      if (isNaN(userId) || userId <= 0) {
+        console.log(`Invalid user ID provided: ${req.params.id}`);
+        return res.status(400).json({ 
+          message: 'Invalid user ID', 
+          details: { providedId: req.params.id }
+        });
       }
       
+      console.log(`Looking for user with ID: ${userId}`);
       const user = await userModel.getById(userId);
       
       if (!user) {
+        console.log(`User not found with ID: ${userId}`);
         return res.status(404).json({ message: 'User not found' });
       }
       
@@ -72,65 +84,184 @@ class UserController {
   // Update user
   async updateUser(req: Request, res: Response) {
     try {
-      const userId = parseInt(req.params.id);
-      const { full_name, phone, nationality, location, role } = req.body;
-      
-      if (isNaN(userId)) {
-        return res.status(400).json({ message: 'Invalid user ID' });
-      }
-      
-      // Check if user exists
-      const user = await userModel.getById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-      
-      // Update user
-      const updated = await userModel.update(userId, {
-        full_name,
-        phone,
-        nationality,
-        location,
-        role: role as 'admin' | 'supervisor' | 'employee'
+      console.log('Update user request received:', {
+        userId: req.params.id,
+        body: req.body
       });
       
-      if (!updated) {
-        return res.status(400).json({ message: 'No changes were made' });
+      const userId = parseInt(req.params.id, 10);
+      const { full_name, phone, nationality, location, role } = req.body;
+      
+      if (isNaN(userId) || userId <= 0) {
+        console.log(`Invalid user ID: ${req.params.id}`);
+        return res.status(400).json({ 
+          message: 'Invalid user ID',
+          details: { providedId: req.params.id } 
+        });
       }
       
-      return res.status(200).json({ message: 'User updated successfully' });
-    } catch (error) {
+      // Check if user exists directly in database
+      try {
+        // Check if the user exists
+        const [userRows]: any = await pool.execute('SELECT * FROM users WHERE id = ?', [userId]);
+        
+        if (!userRows || userRows.length === 0) {
+          console.log(`User not found with ID: ${userId}`);
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        const user = userRows[0];
+        console.log(`Found user:`, user);
+        
+        // Build SQL update query dynamically
+        let updates = [];
+        let params = [];
+        
+        if (full_name !== undefined && full_name !== user.full_name) {
+          updates.push('full_name = ?');
+          params.push(full_name);
+        }
+        
+        if (phone !== undefined && phone !== user.phone) {
+          updates.push('phone = ?');
+          params.push(phone);
+        }
+        
+        if (nationality !== undefined && nationality !== user.nationality) {
+          updates.push('nationality = ?');
+          params.push(nationality);
+        }
+        
+        if (location !== undefined && location !== user.location) {
+          updates.push('location = ?');
+          params.push(location);
+        }
+        
+        if (role !== undefined && role !== user.role) {
+          updates.push('role = ?');
+          params.push(role);
+        }
+        
+        // If nothing to update, return success
+        if (updates.length === 0) {
+          console.log('No changes detected, returning success');
+          return res.status(200).json({ 
+            message: 'No changes were needed',
+            success: true,
+            unchanged: true
+          });
+        }
+        
+        // Add user ID to params
+        params.push(userId);
+        
+        // Execute the update directly
+        console.log('Executing update with:', { updates, params });
+        const query = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
+        console.log('Update query:', query);
+        
+        const [updateResult]: any = await pool.execute(query, params);
+        
+        console.log('Update result:', updateResult);
+        
+        // Always assume success if we got this far
+        return res.status(200).json({ 
+          message: 'User updated successfully',
+          success: true
+        });
+        
+      } catch (dbError: any) {
+        console.error('Database error during update:', dbError);
+        return res.status(500).json({ 
+          message: 'Database error occurred during update',
+          success: false,
+          details: dbError.message
+        });
+      }
+    } catch (error: any) {
       console.error('Update user error:', error);
-      return res.status(500).json({ message: 'An error occurred while updating user' });
+      return res.status(500).json({ 
+        message: 'An error occurred while updating user',
+        error: error.message || 'Unknown error',
+        success: false
+      });
     }
   }
   
   // Delete user
   async deleteUser(req: Request, res: Response) {
     try {
-      const userId = parseInt(req.params.id);
+      const userId = parseInt(req.params.id, 10);
+      console.log('Delete request for user ID:', userId);
       
-      if (isNaN(userId)) {
-        return res.status(400).json({ message: 'Invalid user ID' });
+      if (isNaN(userId) || userId <= 0) {
+        console.log(`Invalid user ID format: ${req.params.id}`);
+        return res.status(400).json({ 
+          message: 'Invalid user ID format',
+          success: false 
+        });
       }
       
-      // Check if user exists
-      const user = await userModel.getById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+      // Use a simplified approach without transactions
+      try {
+        // Check if the user exists
+        const [userCheckResult]: any = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
+        
+        if (!userCheckResult || userCheckResult.length === 0) {
+          return res.status(404).json({ 
+            message: 'User not found in database',
+            success: false
+          });
+        }
+        
+        console.log(`Found user with ID ${userId}, proceeding with deletion`);
+        
+        // First remove any supervisor assignments
+        console.log('Removing supervisor assignments...');
+        await pool.execute(
+          'DELETE FROM employee_supervisors WHERE employee_id = ? OR supervisor_id = ?', 
+          [userId, userId]
+        );
+        
+        // Then delete the user
+        console.log('Deleting user...');
+        const [deleteResult]: any = await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
+        
+        console.log('Delete operation result:', deleteResult);
+        
+        // Always assume success if we got this far without errors
+        console.log(`Successfully deleted user ${userId}`);
+        return res.status(200).json({ 
+          message: 'User deleted successfully',
+          success: true 
+        });
+        
+      } catch (dbError: any) {
+        console.error('Full database error:', dbError);
+        
+        // Check for foreign key constraint violations
+        if (dbError.code === 'ER_ROW_IS_REFERENCED' || dbError.errno === 1451) {
+          return res.status(400).json({
+            message: 'Cannot delete this user because they are referenced by other records',
+            success: false
+          });
+        }
+        
+        // Return more specific error details to help diagnose the issue
+        return res.status(500).json({ 
+          message: 'Database error occurred',
+          success: false,
+          details: dbError.message,
+          code: dbError.code || dbError.errno
+        });
       }
       
-      // Delete user
-      const deleted = await userModel.delete(userId);
-      
-      if (!deleted) {
-        return res.status(500).json({ message: 'Failed to delete user' });
-      }
-      
-      return res.status(200).json({ message: 'User deleted successfully' });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Delete user error:', error);
-      return res.status(500).json({ message: 'An error occurred while deleting user' });
+      return res.status(500).json({ 
+        message: 'An error occurred while deleting user',
+        success: false
+      });
     }
   }
   
@@ -170,63 +301,6 @@ class UserController {
     }
   }
   
-  // Assign supervisor to employee
-  async assignSupervisor(req: Request, res: Response) {
-    try {
-      const { employeeId, supervisorId } = req.body;
-      
-      // Debug log to see what values are being received
-      console.log('Assign supervisor request received:', {
-        employeeId: employeeId,
-        supervisorId: supervisorId,
-        employeeIdType: typeof employeeId,
-        supervisorIdType: typeof supervisorId
-      });
-      
-      // Convert string IDs to integers if needed
-      const empId = typeof employeeId === 'string' ? parseInt(employeeId) : employeeId;
-      const supId = typeof supervisorId === 'string' ? parseInt(supervisorId) : supervisorId;
-      
-      if (!empId || isNaN(empId) || !supId || isNaN(supId)) {
-        return res.status(400).json({ message: 'Valid employee ID and supervisor ID are required' });
-      }
-      
-      // Check if employee exists
-      const employee = await userModel.getById(empId);
-      if (!employee) {
-        return res.status(404).json({ message: `Employee not found with ID: ${empId}` });
-      }
-      
-      // Check if supervisor exists
-      const supervisor = await userModel.getById(supId);
-      if (!supervisor) {
-        return res.status(404).json({ message: `Supervisor not found with ID: ${supId}` });
-      }
-      
-      // Check if employee is actually an employee
-      if (employee.role !== 'employee') {
-        return res.status(400).json({ message: 'User is not an employee' });
-      }
-      
-      // Check if supervisor is actually a supervisor or admin
-      if (supervisor.role !== 'supervisor' && supervisor.role !== 'admin') {
-        return res.status(400).json({ message: 'User is not a supervisor or admin' });
-      }
-      
-      // Assign supervisor
-      const assigned = await userModel.assignSupervisor(employeeId, supervisorId);
-      
-      if (!assigned) {
-        return res.status(500).json({ message: 'Failed to assign supervisor' });
-      }
-      
-      return res.status(200).json({ message: 'Supervisor assigned successfully' });
-    } catch (error) {
-      console.error('Assign supervisor error:', error);
-      return res.status(500).json({ message: 'An error occurred while assigning supervisor' });
-    }
-  }
-  
   // Get supervisor for employee
   async getSupervisorForEmployee(req: Request, res: Response) {
     try {
@@ -245,16 +319,41 @@ class UserController {
       // Get supervisor
       const supervisor = await userModel.getSupervisorForEmployee(employeeId);
       
+      // Return 200 even when no supervisor is found, just with null supervisor property
+      // This prevents client-side error handling for what's a normal state
       if (!supervisor) {
-        return res.status(404).json({ message: 'No supervisor assigned to this employee' });
+        return res.status(200).json({ 
+          supervisor: null, 
+          message: 'No supervisor assigned to this employee',
+          success: true
+        });
       }
       
-      return res.status(200).json({ supervisor });
+      return res.status(200).json({ supervisor, success: true });
     } catch (error) {
       console.error('Get supervisor for employee error:', error);
       return res.status(500).json({ message: 'An error occurred while getting supervisor' });
     }
   }
+  
+  // Get all supervisor assignments at once (optimization)
+  async getAllSupervisorAssignments(req: Request, res: Response) {
+    try {
+      const [assignments]: any = await pool.execute('SELECT * FROM employee_supervisors');
+      
+      return res.status(200).json({
+        success: true,
+        assignments: assignments || []
+      });
+    } catch (error) {
+      console.error('Get all supervisor assignments error:', error);
+      return res.status(200).json({ 
+        success: false, 
+        assignments: [],
+        message: 'An error occurred while getting supervisor assignments'
+      });
+    }
+  }
 }
 
-export default new UserController(); 
+export default new UserController();

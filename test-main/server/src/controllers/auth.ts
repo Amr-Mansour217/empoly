@@ -77,7 +77,7 @@ class AuthController {
   // Register user (admin only)
   async register(req: Request, res: Response) {
     try {
-      const { username, password, full_name, phone, nationality, location, role } = req.body;
+      const { username, password, full_name, phone, nationality, location, role, supervisorId } = req.body;
       
       // Validate input
       if (!username || !password || !full_name || !role) {
@@ -100,6 +100,26 @@ class AuthController {
         location,
         role: role as 'admin' | 'supervisor' | 'employee'
       });
+      
+      // If this is an employee and a supervisor was provided, assign the supervisor
+      if (role === 'employee' && supervisorId && userId) {
+        try {
+          const supId = typeof supervisorId === 'string' ? parseInt(supervisorId) : supervisorId;
+          
+          // Check if supervisor exists
+          const supervisor = await userModel.getById(supId);
+          if (supervisor && (supervisor.role === 'supervisor' || supervisor.role === 'admin')) {
+            // Assign supervisor to the new employee
+            await userModel.assignSupervisor(userId, supId);
+            console.log(`Assigned supervisor ${supId} to new employee ${userId}`);
+          } else {
+            console.warn(`Invalid supervisor ID ${supId} provided during user creation`);
+          }
+        } catch (assignError) {
+          console.error('Error assigning supervisor during user creation:', assignError);
+          // Continue with the registration process even if supervisor assignment fails
+        }
+      }
       
       // Return success
       return res.status(201).json({

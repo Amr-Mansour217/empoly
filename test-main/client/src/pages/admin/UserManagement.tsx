@@ -66,6 +66,8 @@ const UserManagement: React.FC = () => {
     employeeId: 0,
     supervisorId: 0
   });
+  // Track supervisor assignments for each employee
+  const [employeeSupervisors, setEmployeeSupervisors] = useState<Record<number, User>>({});
 
   // Fetch users and supervisors
   useEffect(() => {
@@ -91,6 +93,52 @@ const UserManagement: React.FC = () => {
           const supervisorsFromUsers = usersList.filter(u => u.role === 'supervisor' || u.role === 'admin');
           console.log('Using supervisors extracted from user list:', supervisorsFromUsers);
           setSupervisors(supervisorsFromUsers);
+          
+          // Fetch supervisor information for employees
+          const supervisorMap: Record<number, User> = {};
+          const employees = usersList.filter(u => u.role === 'employee');
+          
+          console.log('Fetching supervisor info for all employees...');
+          
+          // First try to fetch from employee_supervisors directly using a custom endpoint
+          try {
+            const allAssignmentsResponse = await axios.get('/api/users/all-supervisor-assignments');
+            if (allAssignmentsResponse.data && allAssignmentsResponse.data.assignments) {
+              console.log('Fetched all supervisor assignments at once:', allAssignmentsResponse.data);
+              
+              // Process all assignments
+              allAssignmentsResponse.data.assignments.forEach(assignment => {
+                const supervisorUser = usersList.find(u => u.id === assignment.supervisor_id);
+                if (supervisorUser) {
+                  supervisorMap[assignment.employee_id] = supervisorUser;
+                }
+              });
+            }
+          } catch (bulkError) {
+            console.log('Bulk supervisor fetch failed, falling back to individual requests');
+            
+            // Fall back to individual requests if the bulk endpoint doesn't exist
+            // Get supervisors for all employees
+            await Promise.all(
+              employees.map(async (employee) => {
+                try {
+                  console.log(`Fetching supervisor for employee ID ${employee.id}...`);
+                  const response = await axios.get(`/api/users/${employee.id}/supervisor`);
+                  if (response.data && response.data.supervisor) {
+                    console.log(`Found supervisor for employee ${employee.id}:`, response.data.supervisor);
+                    supervisorMap[employee.id] = response.data.supervisor;
+                  }
+                } catch (supervisorError) {
+                  console.log(`No supervisor found for employee ${employee.id}:`, supervisorError);
+                  // Ignore errors for employees without supervisors
+                }
+              })
+            );
+          }
+          
+          console.log('Final supervisor map:', supervisorMap);
+          setEmployeeSupervisors(supervisorMap);
+          
         } catch (apiError: any) {
           console.error('Error in API calls:', apiError);
           
@@ -123,6 +171,7 @@ const UserManagement: React.FC = () => {
       nationality: '',
       location: '',
       role: 'employee' as 'admin' | 'supervisor' | 'employee',
+      supervisorId: 0, // Add supervisorId field
     },
     validationSchema: Yup.object({
       username: Yup.string().required('اسم المستخدم مطلوب'),
@@ -139,8 +188,10 @@ const UserManagement: React.FC = () => {
     onSubmit: async (values, { resetForm }) => {
       try {
         setLoading(true);
-        setError(null); // Limpiar cualquier error previo
+        setError(null); // Clear any previous errors
         
+        let newUserId = values.id; // Will store new user ID if created
+
         if (values.id) {
           // Update existing user
           await axios.post(`/api/users/${values.id}`, {
@@ -152,8 +203,25 @@ const UserManagement: React.FC = () => {
           });
         } else {
           // Create new user
-          await axios.post('/api/auth/register', values);
+          const registerResponse = await axios.post('/api/auth/register', {
+            username: values.username,
+            password: values.password,
+            full_name: values.full_name,
+            phone: values.phone || null,
+            nationality: values.nationality || null,
+            location: values.location || null,
+            role: values.role
+            // Supervisor selection has been removed from the form
+          });
+          
+          // Capture the new user ID for potential supervisor assignment
+          if (registerResponse.data && registerResponse.data.userId) {
+            newUserId = registerResponse.data.userId;
+            console.log('New user created with ID:', newUserId);
+          }
         }
+        
+        // Supervisor assignment during user creation has been removed since the supervisor dropdown was removed
         
         // Refresh user list
         const response = await axios.get('/api/users');
@@ -172,6 +240,36 @@ const UserManagement: React.FC = () => {
         console.log('Updated supervisors from user list:', newSupervisors);
         setSupervisors(newSupervisors);
         
+        console.log('Current employeeSupervisors before update:', employeeSupervisors);
+        
+        // Force refresh all supervisor assignments after user creation/update
+        try {
+          // Load all supervisor assignments to ensure everything is in sync
+          const allAssignmentsResponse = await axios.get('/api/users/all-supervisor-assignments');
+          if (allAssignmentsResponse.data && allAssignmentsResponse.data.assignments) {
+            const assignments = allAssignmentsResponse.data.assignments;
+            console.log('All supervisor assignments after user action:', assignments);
+            
+            // Create a complete supervisor map from all assignments
+            const completeMap = { ...employeeSupervisors }; // Start with existing assignments
+            
+            for (const assignment of assignments) {
+              const supId = assignment.supervisor_id;
+              const empId = assignment.employee_id;
+              const supervisor = updatedUsers.find(u => u.id === supId);
+              if (supervisor) {
+                completeMap[empId] = supervisor;
+              }
+            }
+            
+            console.log('Complete supervisor map after refresh:', completeMap);
+            setEmployeeSupervisors(completeMap);
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing supervisor assignments:', refreshError);
+          // Continue with the flow even if refreshing fails
+        }
+        
         resetForm();
         setUserFormOpen(false);
       } catch (error: any) {
@@ -184,14 +282,62 @@ const UserManagement: React.FC = () => {
   });
 
   // Open user form for adding new user
-  const handleAddUser = () => {
-    userFormik.resetForm();
+  const handleAddUser = async () => {
+    // Reset the form and make sure supervisorId is set to 0 (default)
+    userFormik.resetForm({
+      values: {
+        id: 0,
+        username: '',
+        password: '',
+        full_name: '',
+        phone: '',
+        nationality: '',
+        location: '',
+        role: 'employee',
+        supervisorId: 0,
+      }
+    });
     setSelectedUser(null);
+    
+    try {
+      // Load fresh supervisors data before opening the dialog
+      console.log('Fetching latest supervisors before opening add user form...');
+      
+      // Option 1: Extract from current users list
+      const availableSupervisors = users.filter(u => 
+        (u.role === 'supervisor' || u.role === 'admin')
+      );
+      
+      if (availableSupervisors.length > 0) {
+        console.log('Found supervisors in current users:', availableSupervisors);
+        setSupervisors(availableSupervisors);
+      } else {
+        // Option 2: Try fetching from API as a fallback
+        try {
+          console.log('No supervisors in current users list, fetching from API...');
+          const supervisorsResponse = await axios.get('/api/users/supervisors');
+          if (supervisorsResponse.data && supervisorsResponse.data.supervisors) {
+            console.log('Fetched supervisors from API:', supervisorsResponse.data.supervisors);
+            setSupervisors(supervisorsResponse.data.supervisors);
+          }
+        } catch (apiError) {
+          console.error('Failed to fetch supervisors from API:', apiError);
+          // Continue with empty supervisors list
+        }
+      }
+      
+      // Clear any previously selected supervisor
+      userFormik.setFieldValue('supervisorId', 0);
+    } catch (error) {
+      console.error('Error preparing add user form:', error);
+    }
+    
     setUserFormOpen(true);
   };
 
   // Open user form for editing user
-  const handleEditUser = (user: User) => {
+  const handleEditUser = async (user: User) => {
+    // First, set basic user information
     userFormik.setValues({
       id: user.id,
       username: user.username,
@@ -201,8 +347,36 @@ const UserManagement: React.FC = () => {
       nationality: user.nationality || '',
       location: user.location || '',
       role: user.role,
+      supervisorId: 0, // Default value, will update if assigned supervisor is found
     });
+    
     setSelectedUser(user);
+    
+    // If the user is an employee, try to get their assigned supervisor
+    if (user.role === 'employee') {
+      try {
+        // Load supervisors for dropdown
+        const availableSupervisors = users.filter(u => 
+          (u.role === 'supervisor' || u.role === 'admin') && u.id !== user.id
+        );
+        if (availableSupervisors.length > 0) {
+          setSupervisors(availableSupervisors);
+        }
+        
+        // Fetch the employee's supervisor if they have one
+        const supervisorResponse = await axios.get(`/api/users/${user.id}/supervisor`);
+        if (supervisorResponse.data && supervisorResponse.data.supervisor) {
+          console.log('Found supervisor for employee:', supervisorResponse.data.supervisor);
+          
+          // Update the formik values with the supervisor ID
+          userFormik.setFieldValue('supervisorId', supervisorResponse.data.supervisor.id);
+        }
+      } catch (error) {
+        console.error('Error getting supervisor for employee:', error);
+        // Continue even if we can't get the supervisor
+      }
+    }
+    
     setUserFormOpen(true);
   };
 
@@ -239,9 +413,21 @@ const UserManagement: React.FC = () => {
   // Open assign supervisor dialog
   const handleAssignSupervisorClick = async (employee: User) => {
     setSelectedUser(employee);
+    
+    // تأكد من أن معرف الموظف رقم صحيح موجب
+    const numericEmployeeId = typeof employee.id === 'string' ? parseInt(employee.id) : 
+                           typeof employee.id === 'number' ? employee.id : 0;
+    
+    console.log('Preparing to assign supervisor for employee:', {
+      original: employee.id,
+      converted: numericEmployeeId,
+      originalType: typeof employee.id,
+      convertedType: typeof numericEmployeeId
+    });
+    
     // Ensure we're using a number type for the employee ID
     setAssignmentData({
-      employeeId: typeof employee.id === 'string' ? parseInt(employee.id) : employee.id,
+      employeeId: numericEmployeeId,
       supervisorId: 0
     });
     
@@ -282,7 +468,8 @@ const UserManagement: React.FC = () => {
       
       console.log('Assigning supervisor:', assignmentData);
       // Send the assignment request to the server
-      const assignResponse = await axios.post('/api/users/assign-supervisor', assignmentData);
+      const assignResponse = await axios.post('http://localhost:5001/test/supervisor-assign', assignmentData);
+      
       console.log('Assignment response:', assignResponse.data);
       
       // Refresh user list to show updated assignment
@@ -295,6 +482,20 @@ const UserManagement: React.FC = () => {
       );
       console.log('Updated supervisors list from users:', updatedSupervisors);
       setSupervisors(updatedSupervisors);
+      
+      // Update the employee-supervisor mapping in the local state
+      const updatedUsers = response.data.users || [];
+      const assignedSupervisor = updatedUsers.find((u: User) => u.id === assignmentData.supervisorId);
+      if (assignedSupervisor) {
+        console.log('Updating local supervisor mapping:', {
+          employeeId: assignmentData.employeeId,
+          supervisor: assignedSupervisor
+        });
+        setEmployeeSupervisors(prevMap => ({
+          ...prevMap,
+          [assignmentData.employeeId]: assignedSupervisor
+        }));
+      }
       
       // Show success message
       alert('تم تعيين المشرف بنجاح'); // Simple success message
@@ -382,6 +583,7 @@ const UserManagement: React.FC = () => {
                   <TableCell>الاسم الكامل</TableCell>
                   <TableCell>الدور</TableCell>
                   <TableCell>الهاتف</TableCell>
+                  <TableCell>المشرف</TableCell>
                   <TableCell>الإجراءات</TableCell>
                 </TableRow>
               </TableHead>
@@ -400,6 +602,29 @@ const UserManagement: React.FC = () => {
                       />
                     </TableCell>
                     <TableCell>{user.phone || '-'}</TableCell>
+                    <TableCell>
+                      {user.role === 'employee' ? (
+                        employeeSupervisors[user.id] ? (
+                          <Chip 
+                            label={employeeSupervisors[user.id].full_name}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            icon={<SupervisorAccountIcon />}
+                          />
+                        ) : (
+                          <Chip
+                            label="لا يوجد مشرف"
+                            size="small"
+                            color="default"
+                            variant="outlined"
+                            onClick={() => handleAssignSupervisorClick(user)}
+                          />
+                        )
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
                     <TableCell>
                       <IconButton onClick={() => handleEditUser(user)} size="small">
                         <EditIcon fontSize="small" />
@@ -521,6 +746,7 @@ const UserManagement: React.FC = () => {
                   margin="normal"
                 />
               </Grid>
+              {/* Supervisor dropdown removed as requested */}
             </Grid>
           </DialogContent>
           <DialogActions>
