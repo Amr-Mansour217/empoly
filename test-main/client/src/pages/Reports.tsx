@@ -37,6 +37,7 @@ interface Report {
   location: string | null;
   report_date: string;
   submitted_at: string;
+  has_submitted: number; // 1 for submitted, 0 for not submitted
 }
 
 interface Supervisor {
@@ -441,19 +442,28 @@ const Reports: React.FC = () => {
               </TableHead>
               <TableBody>
                 {filteredReports.map((report) => (
-                  <TableRow key={report.id}>
+                  <TableRow key={`${report.employee_id}-${report.report_date}`}>
                     <TableCell>{format(new Date(report.report_date), 'yyyy/MM/dd')}</TableCell>
                     <TableCell>{report.full_name}</TableCell>
                     <TableCell>
-                      <Chip 
-                        label={report.activity_name} 
-                        size="small" 
-                        color="primary" 
-                        variant="outlined"
-                      />
+                      {report.has_submitted ? (
+                        <Chip 
+                          label={report.activity_name} 
+                          size="small" 
+                          color="primary" 
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Chip 
+                          label="لم يتم تقديم تقرير" 
+                          size="small" 
+                          color="error" 
+                          variant="outlined"
+                        />
+                      )}
                     </TableCell>
-                    <TableCell>{report.beneficiaries_count}</TableCell>
-                    <TableCell>{report.location || '-'}</TableCell>
+                    <TableCell>{report.has_submitted ? report.beneficiaries_count : '-'}</TableCell>
+                    <TableCell>{report.has_submitted && report.location ? report.location : '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -471,20 +481,26 @@ const Reports: React.FC = () => {
         {filteredReports.length > 0 && (
           <Box sx={{ mt: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={4}>
-                <Typography variant="subtitle2">إجمالي التقارير:</Typography>
+              <Grid item xs={12} sm={3}>
+                <Typography variant="subtitle2">إجمالي الموظفين:</Typography>
                 <Typography variant="h6">{filteredReports.length}</Typography>
               </Grid>
-              <Grid item xs={12} sm={4}>
-                <Typography variant="subtitle2">إجمالي المستفيدين:</Typography>
-                <Typography variant="h6">
-                  {filteredReports.reduce((sum, report) => sum + report.beneficiaries_count, 0)}
+              <Grid item xs={12} sm={3}>
+                <Typography variant="subtitle2">قدموا تقارير:</Typography>
+                <Typography variant="h6" color="success.main">
+                  {filteredReports.filter(report => report.has_submitted).length}
                 </Typography>
               </Grid>
-              <Grid item xs={12} sm={4}>
-                <Typography variant="subtitle2">متوسط المستفيدين لكل تقرير:</Typography>
+              <Grid item xs={12} sm={3}>
+                <Typography variant="subtitle2">لم يقدموا تقارير:</Typography>
+                <Typography variant="h6" color="error.main">
+                  {filteredReports.filter(report => !report.has_submitted).length}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <Typography variant="subtitle2">إجمالي المستفيدين:</Typography>
                 <Typography variant="h6">
-                  {Math.round(filteredReports.reduce((sum, report) => sum + report.beneficiaries_count, 0) / filteredReports.length)}
+                  {filteredReports.reduce((sum, report) => sum + (report.has_submitted ? report.beneficiaries_count || 0 : 0), 0)}
                 </Typography>
               </Grid>
             </Grid>

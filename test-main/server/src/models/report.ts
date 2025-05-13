@@ -85,61 +85,122 @@ class ReportModel {
     return rows.length ? rows[0] : null;
   }
   
-  // Get all reports
+  // Get all reports - modified to include all employees
   async getAll(): Promise<ReportWithDetails[]> {
+    // Get current date
+    const today = new Date().toISOString().split('T')[0];
+
+    // Use LEFT JOIN to include all employees, even those without reports
     const [rows]: any = await pool.execute(
-      `SELECT dr.*, u.full_name, at.name as activity_name 
-       FROM daily_reports dr
-       JOIN users u ON dr.employee_id = u.id
-       JOIN activity_types at ON dr.activity_type_id = at.id
-       ORDER BY dr.report_date DESC`
+      `SELECT 
+         IFNULL(dr.id, 0) as id,
+         u.id as employee_id,
+         u.full_name,
+         dr.activity_type_id,
+         dr.beneficiaries_count,
+         dr.location,
+         IFNULL(dr.report_date, ?) as report_date,
+         dr.submitted_at,
+         at.name as activity_name,
+         CASE WHEN dr.id IS NOT NULL THEN 1 ELSE 0 END as has_submitted
+       FROM users u
+       LEFT JOIN daily_reports dr ON u.id = dr.employee_id AND dr.report_date = ?
+       LEFT JOIN activity_types at ON dr.activity_type_id = at.id
+       WHERE u.role = 'employee'
+       ORDER BY u.full_name ASC`,
+      [today, today]
     );
     
     return rows;
   }
   
-  // Get reports by supervisor ID
+  // Get reports by supervisor ID - modified to include all employees
   async getBySupervisorId(supervisorId: number): Promise<ReportWithDetails[]> {
+    // Get current date
+    const today = new Date().toISOString().split('T')[0];
+
+    // Use LEFT JOIN to include all employees assigned to this supervisor, even without reports
     const [rows]: any = await pool.execute(
-      `SELECT dr.*, u.full_name, at.name as activity_name 
-       FROM daily_reports dr
-       JOIN users u ON dr.employee_id = u.id
-       JOIN activity_types at ON dr.activity_type_id = at.id
-       JOIN employee_supervisors es ON dr.employee_id = es.employee_id
-       WHERE es.supervisor_id = ?
-       ORDER BY dr.report_date DESC`,
-      [supervisorId]
+      `SELECT 
+         IFNULL(dr.id, 0) as id,
+         u.id as employee_id,
+         u.full_name,
+         dr.activity_type_id,
+         dr.beneficiaries_count,
+         dr.location,
+         IFNULL(dr.report_date, ?) as report_date,
+         dr.submitted_at,
+         at.name as activity_name,
+         CASE WHEN dr.id IS NOT NULL THEN 1 ELSE 0 END as has_submitted
+       FROM users u
+       JOIN employee_supervisors es ON u.id = es.employee_id
+       LEFT JOIN daily_reports dr ON u.id = dr.employee_id AND dr.report_date = ?
+       LEFT JOIN activity_types at ON dr.activity_type_id = at.id
+       WHERE es.supervisor_id = ? AND u.role = 'employee'
+       ORDER BY u.full_name ASC`,
+      [today, today, supervisorId]
     );
     
     return rows;
   }
   
-  // Get reports by date range
+  // Get reports by date range - modified to include all employees
   async getByDateRange(startDate: string, endDate: string): Promise<ReportWithDetails[]> {
+    // For report ranges, we'll focus on the endDate (typically today)
+    // This ensures we show current employee status for the selected period
+
+    // Use LEFT JOIN to include all employees, even those without reports
     const [rows]: any = await pool.execute(
-      `SELECT dr.*, u.full_name, at.name as activity_name 
-       FROM daily_reports dr
-       JOIN users u ON dr.employee_id = u.id
-       JOIN activity_types at ON dr.activity_type_id = at.id
-       WHERE dr.report_date BETWEEN ? AND ?
-       ORDER BY dr.report_date DESC`,
-      [startDate, endDate]
+      `SELECT 
+         IFNULL(dr.id, 0) as id,
+         u.id as employee_id,
+         u.full_name,
+         dr.activity_type_id,
+         dr.beneficiaries_count,
+         dr.location,
+         IFNULL(dr.report_date, ?) as report_date,
+         dr.submitted_at,
+         at.name as activity_name,
+         CASE WHEN dr.id IS NOT NULL THEN 1 ELSE 0 END as has_submitted
+       FROM users u
+       LEFT JOIN (
+         SELECT * FROM daily_reports 
+         WHERE report_date BETWEEN ? AND ?
+       ) dr ON u.id = dr.employee_id AND dr.report_date = ?
+       LEFT JOIN activity_types at ON dr.activity_type_id = at.id
+       WHERE u.role = 'employee'
+       ORDER BY u.full_name ASC, dr.report_date DESC`,
+      [endDate, startDate, endDate, endDate]
     );
     
     return rows;
   }
   
-  // Get reports by supervisor ID and date range
+  // Get reports by supervisor ID and date range - modified to include all employees
   async getBySupervisorAndDateRange(supervisorId: number, startDate: string, endDate: string): Promise<ReportWithDetails[]> {
+    // Use LEFT JOIN to include all employees assigned to this supervisor, even those without reports
     const [rows]: any = await pool.execute(
-      `SELECT dr.*, u.full_name, at.name as activity_name 
-       FROM daily_reports dr
-       JOIN users u ON dr.employee_id = u.id
-       JOIN activity_types at ON dr.activity_type_id = at.id
-       JOIN employee_supervisors es ON dr.employee_id = es.employee_id
-       WHERE es.supervisor_id = ? AND dr.report_date BETWEEN ? AND ?
-       ORDER BY dr.report_date DESC`,
-      [supervisorId, startDate, endDate]
+      `SELECT 
+         IFNULL(dr.id, 0) as id,
+         u.id as employee_id,
+         u.full_name,
+         dr.activity_type_id,
+         dr.beneficiaries_count,
+         dr.location,
+         IFNULL(dr.report_date, ?) as report_date,
+         dr.submitted_at,
+         at.name as activity_name,
+         CASE WHEN dr.id IS NOT NULL THEN 1 ELSE 0 END as has_submitted
+       FROM users u
+       JOIN employee_supervisors es ON u.id = es.employee_id
+       LEFT JOIN (
+         SELECT * FROM daily_reports 
+         WHERE report_date BETWEEN ? AND ?
+       ) dr ON u.id = dr.employee_id AND dr.report_date = ?
+       LEFT JOIN activity_types at ON dr.activity_type_id = at.id
+       WHERE es.supervisor_id = ? AND u.role = 'employee'
+       ORDER BY u.full_name ASC, dr.report_date DESC`,
+      [endDate, startDate, endDate, endDate, supervisorId]
     );
     
     return rows;
