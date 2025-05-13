@@ -236,15 +236,17 @@ const Reports: React.FC = () => {
     }
   };
 
-  const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
+  const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | { target: { name?: string; value: unknown } }) => {
     const { name, value } = event.target;
-    setFilters({
-      ...filters,
-      [name as string]: value,
-    });
+    if (name) {
+      setFilters({
+        ...filters,
+        [name]: value as string,
+      });
+    }
   };
 
-  const handleSupervisorChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+  const handleSupervisorChange = (event: React.ChangeEvent<HTMLInputElement> | { target: { value: unknown } }) => {
     setSelectedSupervisor(event.target.value as number);
   };
 
@@ -308,7 +310,7 @@ const Reports: React.FC = () => {
                 labelId="supervisor-select-label"
                 id="supervisor-select"
                 value={selectedSupervisor || ''}
-                onChange={(e) => handleSupervisorChange(e as any)}
+                onChange={handleSupervisorChange}
                 label="المشرف"
                 disabled={supervisors.length === 0}
               >
