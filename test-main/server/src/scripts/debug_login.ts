@@ -33,10 +33,9 @@ async function debugLogin() {
     });
     
     // Intentar verificar la contraseña
-    let isPasswordValid = false;
-    
-    // Caso especial para usuarios de prueba
-    if ((username === 'admin' || username === 'employee1') && password === 'admin123') {
+    let isPasswordValid = false;    // Caso especial para usuarios de prueba
+    const validUsername = username as string;
+    if ((validUsername === 'admin' || validUsername === 'employee1') && password === 'admin123') {
       console.log("Utilizando validación especial para usuarios de prueba");
       isPasswordValid = true;
     } else {

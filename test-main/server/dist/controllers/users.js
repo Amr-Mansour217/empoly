@@ -13,28 +13,29 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const user_1 = __importDefault(require("../models/user"));
+const db_1 = require("../config/db");
 class UserController {
     // Get all supervisors
     getAllSupervisors(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const supervisors = yield user_1.default.getAllSupervisors();
-                console.log(`Got ${supervisors.length} supervisors from model`);
-                // Always return a success status with the array, even if empty
+                console.log(`Supervisors API - Found ${supervisors.length} supervisors`);
+                // Always return 200 status with the supervisors array, even if empty
+                // This prevents frontend errors and simplifies client-side handling
                 return res.status(200).json({
-                    supervisors,
                     success: true,
+                    supervisors,
                     message: supervisors.length === 0 ? 'No supervisors found, you may need to create users first' : undefined
                 });
             }
             catch (error) {
                 console.error('Get all supervisors error:', error);
-                // Return empty array even when error occurs to prevent client-side errors
+                // Return 200 with empty array instead of 500 to prevent UI errors
                 return res.status(200).json({
-                    supervisors: [],
                     success: false,
-                    error: true,
-                    message: 'An error occurred while getting supervisors, using empty array'
+                    supervisors: [],
+                    message: 'An error occurred while getting supervisors, but we returned an empty list to prevent UI errors.'
                 });
             }
         });
@@ -182,19 +183,80 @@ class UserController {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const { employeeId, supervisorId } = req.body;
-                if (!employeeId || !supervisorId) {
-                    return res.status(400).json({ message: 'Employee ID and supervisor ID are required' });
+                // Enhanced debug logging to trace the exact execution path
+                console.log('Assign supervisor request received:', {
+                    employeeId,
+                    supervisorId,
+                    bodyKeys: Object.keys(req.body),
+                    fullBody: JSON.stringify(req.body)
+                });
+                // Check if the required parameters are present
+                if (employeeId === undefined) {
+                    console.log('Missing employeeId in request');
+                    return res.status(400).json({
+                        message: 'Missing employee ID',
+                        errorCode: 'EMPLOYEE_ID_MISSING'
+                    });
                 }
+                if (supervisorId === undefined) {
+                    console.log('Missing supervisorId in request');
+                    return res.status(400).json({
+                        message: 'Missing supervisor ID',
+                        errorCode: 'SUPERVISOR_ID_MISSING'
+                    });
+                }
+                // Improved ID parsing handling
+                const empId = typeof employeeId === 'string' ? parseInt(employeeId) : employeeId;
+                const supId = typeof supervisorId === 'string' ? parseInt(supervisorId) : supervisorId;
+                // Validate the parsed IDs are valid numbers
+                if (isNaN(empId) || !empId) {
+                    console.log('Invalid employee ID after parsing:', { employeeId, empId });
+                    return res.status(400).json({
+                        message: 'Invalid employee ID format',
+                        errorCode: 'EMPLOYEE_ID_INVALID',
+                        details: { providedValue: employeeId }
+                    });
+                }
+                if (isNaN(supId) || !supId) {
+                    console.log('Invalid supervisor ID after parsing:', { supervisorId, supId });
+                    return res.status(400).json({
+                        message: 'Invalid supervisor ID format',
+                        errorCode: 'SUPERVISOR_ID_INVALID',
+                        details: { providedValue: supervisorId }
+                    });
+                }
+                // تأكد من أن المعرفات أرقام موجبة
+                if (empId <= 0 || supId <= 0) {
+                    return res.status(400).json({
+                        message: 'Employee and supervisor IDs must be positive numbers',
+                        details: {
+                            parsedEmployeeId: empId,
+                            parsedSupervisorId: supId
+                        }
+                    });
+                }
+                console.log(`Checking if employee exists with ID: ${empId} (${typeof empId})`);
                 // Check if employee exists
-                const employee = yield user_1.default.getById(employeeId);
+                const employee = yield user_1.default.getById(empId);
                 if (!employee) {
-                    return res.status(404).json({ message: 'Employee not found' });
+                    console.log(`Employee not found with ID: ${empId}`);
+                    return res.status(404).json({
+                        message: `Employee not found with ID: ${empId}`,
+                        errorCode: 'EMPLOYEE_NOT_FOUND'
+                    });
                 }
+                console.log(`Found employee:`, employee);
+                console.log(`Checking if supervisor exists with ID: ${supId} (${typeof supId})`);
                 // Check if supervisor exists
-                const supervisor = yield user_1.default.getById(supervisorId);
+                const supervisor = yield user_1.default.getById(supId);
                 if (!supervisor) {
-                    return res.status(404).json({ message: 'Supervisor not found' });
+                    console.log(`Supervisor not found with ID: ${supId}`);
+                    return res.status(404).json({
+                        message: `Supervisor not found with ID: ${supId}`,
+                        errorCode: 'SUPERVISOR_NOT_FOUND'
+                    });
                 }
+                console.log(`Found supervisor:`, supervisor);
                 // Check if employee is actually an employee
                 if (employee.role !== 'employee') {
                     return res.status(400).json({ message: 'User is not an employee' });
@@ -203,8 +265,8 @@ class UserController {
                 if (supervisor.role !== 'supervisor' && supervisor.role !== 'admin') {
                     return res.status(400).json({ message: 'User is not a supervisor or admin' });
                 }
-                // Assign supervisor
-                const assigned = yield user_1.default.assignSupervisor(employeeId, supervisorId);
+                // Assign supervisor - استخدام القيم المحولة بدلاً من القيم الأصلية
+                const assigned = yield user_1.default.assignSupervisor(empId, supId);
                 if (!assigned) {
                     return res.status(500).json({ message: 'Failed to assign supervisor' });
                 }
@@ -212,7 +274,10 @@ class UserController {
             }
             catch (error) {
                 console.error('Assign supervisor error:', error);
-                return res.status(500).json({ message: 'An error occurred while assigning supervisor' });
+                return res.status(500).json({
+                    message: 'An error occurred while assigning supervisor',
+                    errorCode: 'INTERNAL_SERVER_ERROR'
+                });
             }
         });
     }
@@ -231,14 +296,40 @@ class UserController {
                 }
                 // Get supervisor
                 const supervisor = yield user_1.default.getSupervisorForEmployee(employeeId);
+                // Return 200 even when no supervisor is found, just with null supervisor property
+                // This prevents client-side error handling for what's a normal state
                 if (!supervisor) {
-                    return res.status(404).json({ message: 'No supervisor assigned to this employee' });
+                    return res.status(200).json({
+                        supervisor: null,
+                        message: 'No supervisor assigned to this employee',
+                        success: true
+                    });
                 }
-                return res.status(200).json({ supervisor });
+                return res.status(200).json({ supervisor, success: true });
             }
             catch (error) {
                 console.error('Get supervisor for employee error:', error);
                 return res.status(500).json({ message: 'An error occurred while getting supervisor' });
+            }
+        });
+    }
+    // Get all supervisor assignments at once (optimization)
+    getAllSupervisorAssignments(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const [assignments] = yield db_1.pool.execute('SELECT * FROM employee_supervisors');
+                return res.status(200).json({
+                    success: true,
+                    assignments: assignments || []
+                });
+            }
+            catch (error) {
+                console.error('Get all supervisor assignments error:', error);
+                return res.status(200).json({
+                    success: false,
+                    assignments: [],
+                    message: 'An error occurred while getting supervisor assignments'
+                });
             }
         });
     }

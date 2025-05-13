@@ -16,15 +16,32 @@ const reports_1 = __importDefault(require("./routes/reports"));
 const attendance_1 = __importDefault(require("./routes/attendance"));
 const activities_1 = __importDefault(require("./routes/activities"));
 const dashboard_1 = __importDefault(require("./routes/dashboard"));
+const test_1 = __importDefault(require("./routes/test"));
 // Load environment variables
 dotenv_1.default.config();
 // Create Express app
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
 // Middleware
-app.use((0, cors_1.default)());
 app.use(express_1.default.json());
+app.use(express_1.default.urlencoded({ extended: true }));
+app.use((0, cors_1.default)());
 app.use((0, morgan_1.default)('dev'));
+// Log all incoming requests for debugging
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+});
+// Add a middleware to debug request body parsing
+app.use((req, res, next) => {
+    if (req.method === 'POST' && req.path.includes('assign-supervisor')) {
+        console.log('Global middleware - Request body check:');
+        console.log('Content-Type:', req.headers['content-type']);
+        console.log('Has body parser run:', typeof req.body === 'object');
+        console.log('Body content:', req.body);
+    }
+    next();
+});
 // Create .env file if it doesn't exist
 const envPath = path_1.default.join(__dirname, '..', '.env');
 if (!fs_1.default.existsSync(envPath)) {
@@ -38,7 +55,12 @@ JWT_SECRET=your_jwt_secret_key_here`;
     console.log('Created default .env file');
 }
 // Routes
+app.use('/test', test_1.default);
 app.use('/api/auth', auth_1.default);
+// Add console log to verify routes are being registered correctly
+console.log('Registering user routes...');
+// Make sure your users routes are properly mounted
+// The path prefix should match what you're using in Postman
 app.use('/api/users', users_1.default);
 app.use('/api/reports', reports_1.default);
 app.use('/api/attendance', attendance_1.default);

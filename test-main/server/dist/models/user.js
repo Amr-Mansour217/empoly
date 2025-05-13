@@ -136,16 +136,11 @@ class UserModel {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const [rows] = yield db_1.pool.execute('SELECT id, username, full_name, phone, nationality, location, role, created_at, updated_at FROM users WHERE role = "supervisor" OR role = "admin"');
-                // Log supervisor count for debugging
-                console.log(`Found ${(rows === null || rows === void 0 ? void 0 : rows.length) || 0} supervisors in database`);
-                // Always return an array, even if empty
                 return rows || [];
             }
             catch (error) {
                 console.error('Error getting all supervisors:', error);
-                // Instead of throwing error, return empty array for better error handling
-                console.log('Returning empty array instead of throwing error');
-                return [];
+                throw error;
             }
         });
     }
@@ -171,23 +166,16 @@ class UserModel {
             try {
                 // Check if the employee already has a supervisor
                 const [existing] = yield db_1.pool.execute('SELECT * FROM employee_supervisors WHERE employee_id = ?', [employeeId]);
-                let result;
                 if (existing && existing.length > 0) {
                     // Update existing relationship
-                    [result] = yield db_1.pool.execute('UPDATE employee_supervisors SET supervisor_id = ? WHERE employee_id = ?', [supervisorId, employeeId]);
+                    const [result] = yield db_1.pool.execute('UPDATE employee_supervisors SET supervisor_id = ? WHERE employee_id = ?', [supervisorId, employeeId]);
+                    return result && result.affectedRows > 0;
                 }
                 else {
                     // Create new relationship
-                    [result] = yield db_1.pool.execute('INSERT INTO employee_supervisors (employee_id, supervisor_id) VALUES (?, ?)', [employeeId, supervisorId]);
+                    const [result] = yield db_1.pool.execute('INSERT INTO employee_supervisors (employee_id, supervisor_id) VALUES (?, ?)', [employeeId, supervisorId]);
+                    return result && result.affectedRows > 0;
                 }
-                const success = result && result.affectedRows > 0;
-                if (success) {
-                    console.log(`Successfully ${existing && existing.length > 0 ? 'updated' : 'created'} supervisor assignment for employee ${employeeId}`);
-                }
-                else {
-                    console.error(`Failed to ${existing && existing.length > 0 ? 'update' : 'create'} supervisor assignment`);
-                }
-                return success;
             }
             catch (error) {
                 console.error('Error assigning supervisor:', error);
