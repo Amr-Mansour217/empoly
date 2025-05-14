@@ -63,7 +63,7 @@ const AdminDashboard: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await axios.get('/api/dashboard');
+        const response = await axios.get('https://elmanafae.online/api/dashboard');
         setDashboardData(response.data);
       } catch (error: any) {
         console.error('Error fetching dashboard data:', error);

@@ -5,21 +5,7 @@ class ReportController {
   // Create a new report
   async createReport(req: Request, res: Response) {
     try {
-      const { 
-        activity_type_id, 
-        beneficiaries_count, 
-        location,
-        lesson1_beneficiaries,
-        lesson1_time,
-        lesson1_completed,
-        lesson2_beneficiaries,
-        lesson2_time,
-        lesson2_completed,
-        quran_session_beneficiaries,
-        quran_session_time,
-        quran_session_completed
-      } = req.body;
-      
+      const { activity_type_id, beneficiaries_count, location } = req.body;
       const employee_id = req.user.id;
       
       // Get current date in YYYY-MM-DD format
@@ -30,61 +16,13 @@ class ReportController {
         return res.status(400).json({ message: 'Activity type and beneficiaries count are required' });
       }
       
-      console.log('Processing report with lesson data:', {
-        lesson1: {
-          beneficiaries: lesson1_beneficiaries || 0,
-          completed: lesson1_completed || false
-        },
-        lesson2: {
-          beneficiaries: lesson2_beneficiaries || 0,
-          completed: lesson2_completed || false
-        },
-        quranSession: {
-          beneficiaries: quran_session_beneficiaries || 0,
-          completed: quran_session_completed || false
-        }
-      });
-      
-      // تحويل قيم المستفيدين إلى أرقام وتحديد حالة الاكتمال اعتماداً عليها
-      // تحويل البيانات إلى أرقام وضمان أنها ليست قيم خاطئة مثل NaN أو undefined
-      const l1_beneficiaries = Math.max(0, Number(lesson1_beneficiaries || 0) || 0);
-      const l2_beneficiaries = Math.max(0, Number(lesson2_beneficiaries || 0) || 0);
-      const qs_beneficiaries = Math.max(0, Number(quran_session_beneficiaries || 0) || 0);
-      
-      // حساب إجمالي عدد المستفيدين من جميع الدروس
-      const totalBeneficiaries = l1_beneficiaries + l2_beneficiaries + qs_beneficiaries;
-      
-      // تحديث إجمالي المستفيدين إذا لم يُحدد أو كان أقل من مجموع الدروس
-      const calculatedBeneficiaries = Math.max(
-        Number(beneficiaries_count) || 0,
-        totalBeneficiaries
-      );
-      
-      console.log('بيانات المستفيدين المعالجة:', {
-        lesson1: l1_beneficiaries,
-        lesson2: l2_beneficiaries,
-        quranSession: qs_beneficiaries,
-        providedTotal: beneficiaries_count,
-        calculatedTotal: totalBeneficiaries,
-        finalTotal: calculatedBeneficiaries
-      });
-      
       // Create report
       const reportId = await reportModel.create({
         employee_id,
         activity_type_id,
-        beneficiaries_count: calculatedBeneficiaries, // استخدام القيمة المحسوبة
+        beneficiaries_count,
         location,
-        report_date: today,
-        lesson1_beneficiaries: l1_beneficiaries,
-        lesson1_time,
-        lesson1_completed: l1_beneficiaries > 0, // تحديد حالة الاكتمال بناءً على عدد المستفيدين
-        lesson2_beneficiaries: l2_beneficiaries,
-        lesson2_time,
-        lesson2_completed: l2_beneficiaries > 0, // تحديد حالة الاكتمال بناءً على عدد المستفيدين
-        quran_session_beneficiaries: qs_beneficiaries,
-        quran_session_time,
-        quran_session_completed: qs_beneficiaries > 0 // تحديد حالة الاكتمال بناءً على عدد المستفيدين
+        report_date: today
       });
       
       return res.status(201).json({
@@ -94,99 +32,6 @@ class ReportController {
     } catch (error) {
       console.error('Create report error:', error);
       return res.status(500).json({ message: 'An error occurred while submitting report' });
-    }
-  }
-  
-  // Update an existing report
-  async updateReport(req: Request, res: Response) {
-    try {
-      const reportId = parseInt(req.params.id);
-      const { 
-        activity_type_id, 
-        beneficiaries_count, 
-        location,
-        lesson1_beneficiaries,
-        lesson1_time,
-        lesson1_completed,
-        lesson2_beneficiaries,
-        lesson2_time,
-        lesson2_completed,
-        quran_session_beneficiaries,
-        quran_session_time,
-        quran_session_completed
-      } = req.body;
-      
-      if (isNaN(reportId)) {
-        return res.status(400).json({ message: 'معرف التقرير غير صالح' });
-      }
-      
-      // تحقق من وجود التقرير
-      const existingReport = await reportModel.getById(reportId);
-      if (!existingReport) {
-        return res.status(404).json({ message: 'لم يتم العثور على التقرير' });
-      }
-      
-      // التحقق من الصلاحيات - يمكن فقط للمالك أو المشرف تحديث التقرير
-      if (req.user.role === 'employee' && existingReport.employee_id !== req.user.id) {
-        return res.status(403).json({ message: 'ليس لديك صلاحية لتحديث هذا التقرير' });
-      }
-      
-      console.log('تحديث التقرير بالبيانات التالية:', {
-        lesson1: {
-          beneficiaries: lesson1_beneficiaries || 0,
-          completed: lesson1_completed || false,
-          time: lesson1_time
-        },
-        lesson2: {
-          beneficiaries: lesson2_beneficiaries || 0,
-          completed: lesson2_completed || false,
-          time: lesson2_time
-        },
-        quranSession: {
-          beneficiaries: quran_session_beneficiaries || 0,
-          completed: quran_session_completed || false,
-          time: quran_session_time
-        }
-      });
-      
-      // تحويل قيم المستفيدين إلى أرقام
-      const l1_beneficiaries = Number(lesson1_beneficiaries ?? existingReport.lesson1_beneficiaries ?? 0);
-      const l2_beneficiaries = Number(lesson2_beneficiaries ?? existingReport.lesson2_beneficiaries ?? 0);
-      const qs_beneficiaries = Number(quran_session_beneficiaries ?? existingReport.quran_session_beneficiaries ?? 0);
-      
-      // إعداد البيانات للتحديث
-      const updateData = {
-        id: reportId,
-        employee_id: existingReport.employee_id,
-        activity_type_id: activity_type_id || existingReport.activity_type_id,
-        beneficiaries_count: beneficiaries_count || existingReport.beneficiaries_count,
-        location: location || existingReport.location,
-        report_date: existingReport.report_date,
-        lesson1_beneficiaries: l1_beneficiaries,
-        lesson1_time: lesson1_time || existingReport.lesson1_time,
-        lesson1_completed: l1_beneficiaries > 0, // تحديد حالة الاكتمال بناءً على عدد المستفيدين
-        lesson2_beneficiaries: l2_beneficiaries,
-        lesson2_time: lesson2_time || existingReport.lesson2_time,
-        lesson2_completed: l2_beneficiaries > 0, // تحديد حالة الاكتمال بناءً على عدد المستفيدين
-        quran_session_beneficiaries: qs_beneficiaries,
-        quran_session_time: quran_session_time || existingReport.quran_session_time,
-        quran_session_completed: qs_beneficiaries > 0 // تحديد حالة الاكتمال بناءً على عدد المستفيدين
-      };
-      
-      // تحديث التقرير
-      const updated = await reportModel.update(updateData);
-      
-      if (!updated) {
-        return res.status(500).json({ message: 'فشل تحديث التقرير' });
-      }
-      
-      return res.status(200).json({
-        message: 'تم تحديث التقرير بنجاح',
-        reportId
-      });
-    } catch (error) {
-      console.error('خطأ في تحديث التقرير:', error);
-      return res.status(500).json({ message: 'حدث خطأ أثناء تحديث التقرير' });
     }
   }
   
@@ -209,12 +54,6 @@ class ReportController {
       if (req.user.role === 'employee' && report.employee_id !== req.user.id) {
         return res.status(403).json({ message: 'You do not have permission to view this report' });
       }
-      
-      console.log('تقرير بالعرض (ID):', {
-        lesson1: { beneficiaries: report.lesson1_beneficiaries, completed: report.lesson1_completed },
-        lesson2: { beneficiaries: report.lesson2_beneficiaries, completed: report.lesson2_completed },
-        quranSession: { beneficiaries: report.quran_session_beneficiaries, completed: report.quran_session_completed }
-      });
       
       return res.status(200).json({ report });
     } catch (error) {
@@ -244,47 +83,52 @@ class ReportController {
       console.error('Get reports by employee ID error:', error);
       return res.status(500).json({ message: 'An error occurred while getting reports' });
     }
-  }    // Get report for current employee and date
+  }
+  
+  // Get detailed report info by employee ID
+  async getEmployeeReportDetails(req: Request, res: Response) {
+    try {
+      const employeeId = parseInt(req.params.id);
+      // التعامل مع كلا المعلمتين: report_date أو date
+      const reportDate = req.query.report_date as string || req.query.date as string || new Date().toISOString().split('T')[0];
+      
+      console.log('طلب تفاصيل التقرير:', { employeeId, reportDate, params: req.params, query: req.query });
+      
+      if (isNaN(employeeId)) {
+        return res.status(400).json({ message: 'Invalid employee ID' });
+      }
+      
+      // Check if user has permission to view these reports
+      if (req.user.role === 'employee' && employeeId !== req.user.id) {
+        return res.status(403).json({ message: 'You do not have permission to view these report details' });
+      }
+      
+      // Get report with detailed activity breakdown
+      const report = await reportModel.getDetailedReportByEmployeeAndDate(employeeId, reportDate);
+      
+      if (!report) {
+        return res.status(404).json({ message: 'Report details not found' });
+      }
+      
+      console.log('تم العثور على تفاصيل التقرير:', report);
+      
+      return res.status(200).json({ 
+        success: true,
+        report 
+      });
+    } catch (error) {
+      console.error('Get employee report details error:', error);
+      return res.status(500).json({ message: 'An error occurred while getting report details' });
+    }
+  }
+  
+  // Get report for current employee and date
   async getCurrentEmployeeReport(req: Request, res: Response) {
     try {
       const employeeId = req.user.id;
       const date = req.query.date as string || new Date().toISOString().split('T')[0];
       
       const report = await reportModel.getByEmployeeAndDate(employeeId, date);
-      
-      // إذا كان هناك تقرير، نتأكد من معالجة البيانات بشكل صحيح
-      if (report) {
-        // نتأكد من تحويل أعداد المستفيدين إلى أرقام
-        report.lesson1_beneficiaries = Number(report.lesson1_beneficiaries || 0);
-        report.lesson2_beneficiaries = Number(report.lesson2_beneficiaries || 0);
-        report.quran_session_beneficiaries = Number(report.quran_session_beneficiaries || 0);
-        
-        // تحديد حالة إكمال الدروس بناءً على عدد المستفيدين
-        report.lesson1_completed = report.lesson1_beneficiaries > 0;
-        report.lesson2_completed = report.lesson2_beneficiaries > 0;
-        report.quran_session_completed = report.quran_session_beneficiaries > 0;
-        
-        // التأكد من أن إجمالي المستفيدين على الأقل يساوي مجموع مستفيدي الدروس الفردية
-        const totalFromLessons = report.lesson1_beneficiaries + report.lesson2_beneficiaries + report.quran_session_beneficiaries;
-        report.beneficiaries_count = Math.max(Number(report.beneficiaries_count || 0), totalFromLessons);
-        
-        console.log('جلب تقرير للموظف الحالي:', {
-          id: report.id,
-          total: report.beneficiaries_count,
-          lesson1: {
-            beneficiaries: report.lesson1_beneficiaries,
-            completed: report.lesson1_completed
-          },
-          lesson2: {
-            beneficiaries: report.lesson2_beneficiaries,
-            completed: report.lesson2_completed
-          },
-          quranSession: {
-            beneficiaries: report.quran_session_beneficiaries,
-            completed: report.quran_session_completed
-          }
-        });
-      }
       
       return res.status(200).json({
         report: report || null,
@@ -365,6 +209,35 @@ class ReportController {
       return res.status(500).json({ message: 'An error occurred while getting statistics' });
     }
   }
+  
+  // الحصول على تفاصيل تقرير موظف محدد
+  async getEmployeeReportDetails(req: Request, res: Response) {
+    try {
+      const employeeId = parseInt(req.params.id);
+      
+      if (isNaN(employeeId)) {
+        return res.status(400).json({ message: 'معرف الموظف غير صالح' });
+      }
+      
+      // الحصول على التاريخ من الاستعلام (أو التاريخ الحالي إذا لم يُحدد)
+      const date = req.query.date as string || new Date().toISOString().split('T')[0];
+      
+      // الحصول على تفاصيل التقرير من قاعدة البيانات
+      const reportDetails = await reportModel.getDetailedReportByEmployeeAndDate(employeeId, date);
+      
+      if (!reportDetails) {
+        return res.status(404).json({ message: 'لم يتم العثور على تقرير لهذا الموظف في هذا التاريخ' });
+      }
+      
+      return res.status(200).json({ 
+        success: true,
+        report: reportDetails 
+      });
+    } catch (error) {
+      console.error('الخطأ في الحصول على تفاصيل تقرير الموظف:', error);
+      return res.status(500).json({ message: 'حدث خطأ أثناء الحصول على تفاصيل التقرير' });
+    }
+  }
 }
 
-export default new ReportController();
+export default new ReportController(); 

@@ -566,7 +566,7 @@ const UserManagement: React.FC = () => {
       
       try {
         // استخدام المسار الصحيح للـ API
-        const assignResponse = await axios.post('https://elmanafea.online/test/supervisor-assign', assignmentData);
+        const assignResponse = await axios.post('https://elmanafea.online/api/users/assign-supervisor', assignmentData);
         console.log('Assignment response:', assignResponse.data);
         
         // تحديث واجهة المستخدم

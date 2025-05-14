@@ -58,6 +58,47 @@ class ReportModel {
             return rows.length ? rows[0] : null;
         });
     }
+    // Get detailed report by employee ID and date with activities breakdown
+    getDetailedReportByEmployeeAndDate(employeeId, date) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // الحصول على التقرير الأساسي
+                const [report] = yield db_1.pool.execute(`SELECT dr.*, u.full_name, at.name as activity_name 
+         FROM daily_reports dr
+         JOIN users u ON dr.employee_id = u.id
+         JOIN activity_types at ON dr.activity_type_id = at.id
+         WHERE dr.employee_id = ? AND dr.report_date = ?`, [employeeId, date]);
+                if (!report || report.length === 0) {
+                    return null;
+                }
+                // إضافة معلومات تفصيلية للأنشطة (مستوحاة من البيانات المستخدمة في واجهة المستخدم)
+                const reportDetails = report[0];
+                // إضافة أنشطة مفصلة
+                reportDetails.activities = [
+                    {
+                        name: "الدرس الأول",
+                        beneficiaries_count: reportDetails.lesson1_beneficiaries || 0,
+                        execution_time: reportDetails.lesson1_time || "00:00"
+                    },
+                    {
+                        name: "الدرس الثاني",
+                        beneficiaries_count: reportDetails.lesson2_beneficiaries || 0,
+                        execution_time: reportDetails.lesson2_time || "00:00"
+                    },
+                    {
+                        name: "حلقة التلاوة",
+                        beneficiaries_count: reportDetails.quran_session_beneficiaries || 0,
+                        execution_time: reportDetails.quran_session_time || "00:00"
+                    }
+                ];
+                return reportDetails;
+            }
+            catch (error) {
+                console.error('Error getting detailed report:', error);
+                return null;
+            }
+        });
+    }
     // Get all reports - modified to include all employees
     getAll() {
         return __awaiter(this, void 0, void 0, function* () {

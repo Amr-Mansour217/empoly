@@ -90,6 +90,36 @@ class ReportController {
             }
         });
     }
+    // Get detailed report info by employee ID
+    getEmployeeReportDetails(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const employeeId = parseInt(req.params.id);
+                const reportDate = req.query.report_date || new Date().toISOString().split('T')[0];
+                if (isNaN(employeeId)) {
+                    return res.status(400).json({ message: 'Invalid employee ID' });
+                }
+                // Check if user has permission to view these reports
+                if (req.user.role === 'employee' && employeeId !== req.user.id) {
+                    return res.status(403).json({ message: 'You do not have permission to view these report details' });
+                }
+                // Get report with detailed activity breakdown
+                const report = yield report_1.default.getDetailedReportByEmployeeAndDate(employeeId, reportDate);
+                console.log(`Debug - Employee report details for ${employeeId} on ${reportDate}:`, report);
+                if (!report) {
+                    console.log(`Debug - No report found for employee ${employeeId} on ${reportDate}`);
+                    return res.status(404).json({ message: 'Report details not found' });
+                }
+                // Enviar la respuesta en el formato que espera el cliente (array 'reports')
+                console.log(`Debug - Sending report details:`, { reports: [report] });
+                return res.status(200).json({ reports: [report] });
+            }
+            catch (error) {
+                console.error('Get employee report details error:', error);
+                return res.status(500).json({ message: 'An error occurred while getting report details' });
+            }
+        });
+    }
     // Get report for current employee and date
     getCurrentEmployeeReport(req, res) {
         return __awaiter(this, void 0, void 0, function* () {

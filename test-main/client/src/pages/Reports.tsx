@@ -19,14 +19,18 @@ import {
   TextField,
   Button,
   Chip,
-  Divider
+  Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle
 } from '@mui/material';
 import { format, subDays } from 'date-fns';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import SearchIcon from '@mui/icons-material/Search';
-import ReportDetailsDialog from '../components/ReportDetailsDialog';
+import PrintIcon from '@mui/icons-material/Print';
 
 interface Report {
   id: number;
@@ -39,6 +43,19 @@ interface Report {
   report_date: string;
   submitted_at: string;
   has_submitted: number; // 1 for submitted, 0 for not submitted
+  
+  // حقول إضافية للتفاصيل
+  lesson1_beneficiaries?: number;
+  lesson1_time?: string;
+  lesson2_beneficiaries?: number;
+  lesson2_time?: string;
+  quran_session_beneficiaries?: number;
+  quran_session_time?: string;
+  activities?: Array<{
+    name: string;
+    beneficiaries_count: number;
+    execution_time: string;
+  }>;
 }
 
 interface Supervisor {
@@ -55,10 +72,8 @@ const Reports: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
-  
-  // متغيرات حالة عرض تفاصيل التقرير
-  const [viewingReport, setViewingReport] = useState<Report | null>(null);
-  const [showReportDetails, setShowReportDetails] = useState<boolean>(false);
+  const [reportDetailsOpen, setReportDetailsOpen] = useState<boolean>(false);
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   
   // Filter states
   const today = new Date().toISOString().split('T')[0];
@@ -254,15 +269,37 @@ const Reports: React.FC = () => {
   const handleSupervisorChange = (event: React.ChangeEvent<HTMLInputElement> | { target: { value: unknown } }) => {
     setSelectedSupervisor(event.target.value as number);
   };
-  
-  // دالة لعرض تفاصيل التقرير عند النقر على الزر
-  const handleViewReportDetails = (report: Report) => {
-    setViewingReport(report);
-    setShowReportDetails(true);
-  };
 
   const handleSearch = () => {
     fetchReports();
+  };
+  
+  // دالة لجلب تفاصيل التقرير عند النقر على "تم تقديم التقرير"
+  const fetchReportDetails = async (report: Report) => {
+    try {
+      setLoading(true);
+      
+      // استعلام عن تفاصيل التقرير بواسطة معرف الموظف وتاريخ التقرير
+      const response = await axios.get(`https://elmanafea.online/api/reports/employee/${report.employee_id}/details`, {
+        params: {
+          // report_date: report.report_date
+        }
+      });
+      
+      console.log('استجابة تفاصيل التقرير:', response.data);
+      
+      if (response.data && response.data.report) {
+        // تحديث بيانات التقرير المحدد
+        setSelectedReport(prevReport => ({
+          ...prevReport,
+          ...response.data.report
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching report details:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading && reports.length === 0 && (user?.role !== 'admin' || supervisors.length === 0)) {
@@ -467,8 +504,13 @@ const Reports: React.FC = () => {
                           size="small" 
                           color="success" 
                           variant="outlined"
-                          onClick={() => handleViewReportDetails(report)}
-                          sx={{ cursor: 'pointer' }}
+                          sx={{ fontWeight: 'bold', cursor: 'pointer' }}
+                          onClick={() => {
+                            setSelectedReport(report);
+                            setReportDetailsOpen(true);
+                            // جلب تفاصيل التقرير
+                            fetchReportDetails(report);
+                          }}
                         />
                       ) : (
                         <Chip 
@@ -536,17 +578,383 @@ const Reports: React.FC = () => {
         </Box>
       )}
 
-      {/* نافذة تفاصيل التقرير */}
-      {viewingReport && (
-        <ReportDetailsDialog
-          open={showReportDetails}
-          onClose={() => setShowReportDetails(false)}
-          employeeId={viewingReport.employee_id}
-          employeeName={viewingReport.full_name}
-          reportDate={viewingReport.report_date}
-          reportId={viewingReport.id}
-        />
-      )}
+      {/* مربع حوار تفاصيل التقرير */}
+      <Dialog
+        open={reportDetailsOpen}
+        onClose={() => {
+          setReportDetailsOpen(false);
+          // مسح بيانات التقرير المحدد عند الإغلاق بعد فترة قصيرة
+          setTimeout(() => setSelectedReport(null), 300);
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#1976d2', color: 'white', py: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              تفاصيل التقرير - {selectedReport?.report_date ? format(new Date(selectedReport.report_date), 'yyyy/MM/dd') : ''}
+            </Typography>
+            <Typography variant="subtitle2">
+              الموظف: {selectedReport?.full_name || ''}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <>
+              {/* رسالة تأكيد بوضوح أن التقرير تم تقديمه */}
+              <Box sx={{ 
+                mb: 3, 
+                p: 2, 
+                bgcolor: '#e8f5e9', 
+                borderRadius: 2, 
+                display: 'flex', 
+                alignItems: 'center',
+                border: '1px solid #4caf50'
+              }}>
+                <Box 
+                  sx={{ 
+                    bgcolor: '#4caf50', 
+                    color: 'white', 
+                    borderRadius: '50%',
+                    width: 40,
+                    height: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    mr: 2
+                  }}
+                >
+                  <span role="img" aria-label="success" style={{ fontSize: '1.5rem' }}>✓</span>
+                </Box>
+                <Box>
+                  <Typography variant="subtitle1" fontWeight="bold" color="#2e7d32">
+                    تم تقديم التقرير بنجاح
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    تم تسجيل التقرير في النظام بتاريخ {selectedReport?.report_date ? format(new Date(selectedReport.report_date), 'yyyy/MM/dd') : ''}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Typography variant="h6" gutterBottom sx={{ borderBottom: '2px solid #1976d2', pb: 1, display: 'inline-block' }}>
+                تفاصيل الأنشطة
+              </Typography>
+              
+              <Paper elevation={3} sx={{ mb: 3, p: 2 }}>
+                <Grid container spacing={2}>
+                  {/* عرض الدرس الأول */}
+                  <Grid item xs={12} md={4}>
+                    <Paper 
+                      elevation={2}
+                      sx={{ 
+                        p: 2, 
+                        textAlign: 'center',
+                        border: '1px solid #4caf50',
+                        borderRadius: 2,
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <Typography variant="subtitle1" fontWeight="bold" color="#4caf50" mb={2}>
+                        الدرس الأول
+                      </Typography>
+                      <Box sx={{ 
+                        my: 2, 
+                        p: 2, 
+                        bgcolor: '#e8f5e9',
+                        borderRadius: 2,
+                        flexGrow: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center'
+                      }}>
+                        <Typography variant="h4" fontWeight="bold" color="#2e7d32">
+                          {selectedReport?.lesson1_beneficiaries || 
+                           (selectedReport?.activities?.find(a => a.name === "الدرس الأول")?.beneficiaries_count) || 
+                           '0'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" mt={1}>
+                          عدد المستفيدين
+                        </Typography>
+                      </Box>
+                      <Box sx={{ mt: 2, pt: 2, borderTop: '1px dashed #e0e0e0' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          وقت التنفيذ
+                        </Typography>
+                        <Typography variant="body1" fontWeight="medium">
+                          {selectedReport?.lesson1_time || 
+                           (selectedReport?.activities?.find(a => a.name === "الدرس الأول")?.execution_time) || 
+                           '00:00'}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                  
+                  {/* عرض الدرس الثاني */}
+                  <Grid item xs={12} md={4}>
+                    <Paper 
+                      elevation={2}
+                      sx={{ 
+                        p: 2, 
+                        textAlign: 'center',
+                        border: '1px solid #ff9800',
+                        borderRadius: 2,
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <Typography variant="subtitle1" fontWeight="bold" color="#ff9800" mb={2}>
+                        الدرس الثاني
+                      </Typography>
+                      <Box sx={{ 
+                        my: 2, 
+                        p: 2, 
+                        bgcolor: '#fff3e0',
+                        borderRadius: 2,
+                        flexGrow: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center'
+                      }}>
+                        <Typography variant="h4" fontWeight="bold" color="#e65100">
+                          {selectedReport?.lesson2_beneficiaries || 
+                           (selectedReport?.activities?.find(a => a.name === "الدرس الثاني")?.beneficiaries_count) || 
+                           '0'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" mt={1}>
+                          عدد المستفيدين
+                        </Typography>
+                      </Box>
+                      <Box sx={{ mt: 2, pt: 2, borderTop: '1px dashed #e0e0e0' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          وقت التنفيذ
+                        </Typography>
+                        <Typography variant="body1" fontWeight="medium">
+                          {selectedReport?.lesson2_time || 
+                           (selectedReport?.activities?.find(a => a.name === "الدرس الثاني")?.execution_time) || 
+                           '00:00'}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                  
+                  {/* عرض حلقة التلاوة */}
+                  <Grid item xs={12} md={4}>
+                    <Paper 
+                      elevation={2}
+                      sx={{ 
+                        p: 2, 
+                        textAlign: 'center',
+                        border: '1px solid #9c27b0',
+                        borderRadius: 2,
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <Typography variant="subtitle1" fontWeight="bold" color="#9c27b0" mb={2}>
+                        حلقة التلاوة
+                      </Typography>
+                      <Box sx={{ 
+                        my: 2, 
+                        p: 2, 
+                        bgcolor: '#f3e5f5',
+                        borderRadius: 2,
+                        flexGrow: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center'
+                      }}>
+                        <Typography variant="h4" fontWeight="bold" color="#7b1fa2">
+                          {selectedReport?.quran_session_beneficiaries || 
+                           (selectedReport?.activities?.find(a => a.name === "حلقة التلاوة")?.beneficiaries_count) || 
+                           '0'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" mt={1}>
+                          عدد المستفيدين
+                        </Typography>
+                      </Box>
+                      <Box sx={{ mt: 2, pt: 2, borderTop: '1px dashed #e0e0e0' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          وقت التنفيذ
+                        </Typography>
+                        <Typography variant="body1" fontWeight="medium">
+                          {selectedReport?.quran_session_time || 
+                           (selectedReport?.activities?.find(a => a.name === "حلقة التلاوة")?.execution_time) || 
+                           '00:00'}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </Paper>
+              
+              {/* عرض إجمالي المستفيدين */}
+              <Paper 
+                elevation={3}
+                sx={{ 
+                  p: 3, 
+                  mt: 4, 
+                  borderRadius: 2, 
+                  background: 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)', 
+                  color: 'white',
+                  textAlign: 'center',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+              >
+                <Box sx={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  right: 0, 
+                  width: '100px', 
+                  height: '100px', 
+                  borderRadius: '50%', 
+                  bgcolor: 'rgba(255,255,255,0.1)',
+                  transform: 'translate(30%, -30%)'
+                }} />
+                <Box sx={{ 
+                  position: 'absolute', 
+                  bottom: 0, 
+                  left: 0, 
+                  width: '70px', 
+                  height: '70px', 
+                  borderRadius: '50%', 
+                  bgcolor: 'rgba(255,255,255,0.1)',
+                  transform: 'translate(-30%, 30%)'
+                }} />
+                
+                <Typography variant="h6" gutterBottom>
+                  إجمالي عدد المستفيدين
+                  <Box component="span" sx={{ display: 'block', fontSize: '0.8rem', opacity: 0.9, mt: 0.5 }}>
+                    مجموع المستفيدين في جميع الأنشطة
+                  </Box>
+                </Typography>
+                
+                <Box sx={{ 
+                  my: 2,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 2,
+                  borderRadius: '50%',
+                  bgcolor: 'rgba(255,255,255,0.2)',
+                  width: '150px',
+                  height: '150px'
+                }}>
+                  <Typography variant="h2" fontWeight="bold" sx={{ 
+                    textShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    position: 'relative',
+                    zIndex: 2
+                  }}>
+                    {selectedReport?.beneficiaries_count || '0'}
+                  </Typography>
+                </Box>
+              </Paper>
+              
+              {/* جدول ملخص للأنشطة */}
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h6" gutterBottom sx={{ borderBottom: '2px solid #1976d2', pb: 1, display: 'inline-block' }}>
+                  جدول ملخص للأنشطة
+                </Typography>
+                <TableContainer component={Paper} sx={{ mt: 2, border: '1px solid #e0e0e0' }}>
+                  <Table>
+                    <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 'bold' }}>النشاط</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>عدد المستفيدين</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>وقت التنفيذ</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>الدرس الأول</TableCell>
+                        <TableCell>
+                          <Typography fontWeight="bold">
+                            {selectedReport?.lesson1_beneficiaries || 
+                             (selectedReport?.activities?.find(a => a.name === "الدرس الأول")?.beneficiaries_count) || 
+                             '0'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {selectedReport?.lesson1_time || 
+                           (selectedReport?.activities?.find(a => a.name === "الدرس الأول")?.execution_time) || 
+                           '00:00'}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>الدرس الثاني</TableCell>
+                        <TableCell>
+                          <Typography fontWeight="bold">
+                            {selectedReport?.lesson2_beneficiaries || 
+                             (selectedReport?.activities?.find(a => a.name === "الدرس الثاني")?.beneficiaries_count) || 
+                             '0'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {selectedReport?.lesson2_time || 
+                           (selectedReport?.activities?.find(a => a.name === "الدرس الثاني")?.execution_time) || 
+                           '00:00'}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>حلقة التلاوة</TableCell>
+                        <TableCell>
+                          <Typography fontWeight="bold">
+                            {selectedReport?.quran_session_beneficiaries || 
+                             (selectedReport?.activities?.find(a => a.name === "حلقة التلاوة")?.beneficiaries_count) || 
+                             '0'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {selectedReport?.quran_session_time || 
+                           (selectedReport?.activities?.find(a => a.name === "حلقة التلاوة")?.execution_time) || 
+                           '00:00'}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                        <TableCell sx={{ fontWeight: 'bold' }}>الإجمالي</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>
+                          <Typography color="primary" fontWeight="bold">
+                            {selectedReport?.beneficiaries_count || '0'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            variant="outlined" 
+            color="primary" 
+            startIcon={<PrintIcon />}
+            onClick={() => window.print()}
+          >
+            طباعة التقرير
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={() => setReportDetailsOpen(false)}
+          >
+            إغلاق
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Layout>
   );
 };

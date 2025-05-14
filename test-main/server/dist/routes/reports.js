@@ -16,4 +16,5 @@ router.get('/stats', auth_1.authenticateToken, auth_1.isSupervisor, reports_1.de
 // Protected routes with ownership check
 router.get('/:id', auth_1.authenticateToken, auth_1.isOwnerOrSupervisor, reports_1.default.getReportById);
 router.get('/employee/:id', auth_1.authenticateToken, auth_1.isOwnerOrSupervisor, reports_1.default.getReportsByEmployeeId);
+router.get('/employee/:id/details', auth_1.authenticateToken, auth_1.isOwnerOrSupervisor, reports_1.default.getEmployeeReportDetails);
 exports.default = router;
