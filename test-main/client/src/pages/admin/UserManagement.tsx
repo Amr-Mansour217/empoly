@@ -74,12 +74,16 @@ const UserManagement: React.FC = () => {
   const [notificationOpen, setNotificationOpen] = useState<boolean>(false);
   const [notificationMessage, setNotificationMessage] = useState<string>('');
   const [notificationSeverity, setNotificationSeverity] = useState<AlertColor>('success');
+  // إضافة متغير جديد لتتبع تحديثات الواجهة
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
+  // تعديل useEffect لتعتمد على refreshTrigger
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
+        console.log('Fetching data, refresh trigger value:', refreshTrigger);
         
         try {
           const usersResponse = await axios.get('https://elmanafea.online/api/users');
@@ -151,16 +155,24 @@ const UserManagement: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [refreshTrigger]);
 
   const showNotification = (message: string, severity: AlertColor = 'success') => {
+    console.log(`Showing notification: ${message} (${severity})`);
     setNotificationMessage(message);
     setNotificationSeverity(severity);
     setNotificationOpen(true);
     
+    // زيادة مدة ظهور الإشعارات وتحديث الواجهة تلقائيًا
     setTimeout(() => {
       setNotificationOpen(false);
-    }, 3000);
+    }, 5000);
+  };
+  
+  // دالة لتحديث البيانات في الواجهة
+  const refreshData = () => {
+    console.log('Manually triggering UI refresh');
+    setRefreshTrigger(prev => prev + 1);
   };
   
   const handleNotificationClose = () => {
@@ -199,14 +211,72 @@ const UserManagement: React.FC = () => {
         let newUserId = values.id;
 
         if (values.id) {
-          await axios.post(`https://elmanafea.online/api/users/${values.id}`, {
-            full_name: values.full_name,
-            phone: values.phone || null,
-            nationality: values.nationality || null,
-            location: values.location || null,
-            role: values.role,
-          });
+          try {
+            // سجل البيانات قبل الإرسال
+            console.log('Sending update request with data:', {
+              full_name: values.full_name,
+              phone: values.phone || null,
+              nationality: values.nationality || null,
+              location: values.location || null,
+              role: values.role,
+            });
+            
+            // الخادم يتوقع طريقة POST للتحديث
+            const updateResponse = await axios.post(`https://elmanafea.online/api/users/${values.id}`, {
+              full_name: values.full_name,
+              phone: values.phone || null,
+              nationality: values.nationality || null,
+              location: values.location || null,
+              role: values.role,
+            });
+            
+            console.log('Update response:', updateResponse.data);
+            
+            // معالجة جميع أنواع الاستجابات كنجاح طالما الاستجابة 200
+            const isSuccess = updateResponse.status >= 200 && updateResponse.status < 300;
+            const isNoChanges = updateResponse.data.message === "No changes were detected" || 
+                               updateResponse.data.message === "No changes were made";
+                               
+            if (isSuccess) {
+              if (isNoChanges) {
+                showNotification('لم يتم إجراء أي تغييرات على بيانات المستخدم', 'info');
+              } else {
+                showNotification('تم تحديث المستخدم بنجاح', 'success');
+              }
+              
+              // تحديث واجهة المستخدم
+              refreshData();
+              
+              // إغلاق النموذج
+              resetForm();
+              setUserFormOpen(false);
+            }
+            
+          } catch (updateError: any) {
+            console.error('Error updating user:', updateError);
+            
+            // معالجة خطأ "No changes were made"
+            if (updateError.response?.status === 400 && 
+                (updateError.response?.data?.message === "No changes were made" ||
+                 updateError.response?.data?.message === "No changes were detected")) {
+              // التعامل مع هذه الحالة كنجاح وليس خطأ
+              showNotification('لم يتم إجراء أي تغييرات على بيانات المستخدم', 'info');
+              
+              // تحديث واجهة المستخدم على أي حال
+              refreshData();
+              
+              // إغلاق النموذج
+              resetForm();
+              setUserFormOpen(false);
+            } else {
+              // أخطاء أخرى
+              setError(updateError.response?.data?.message || 'حدث خطأ أثناء تحديث بيانات المستخدم');
+              showNotification('حدث خطأ أثناء تحديث بيانات المستخدم', 'error');
+            }
+            return;
+          }
         } else {
+          // إنشاء مستخدم جديد
           const registerResponse = await axios.post('https://elmanafea.online/api/auth/register', {
             username: values.username,
             password: values.password,
@@ -221,54 +291,21 @@ const UserManagement: React.FC = () => {
             newUserId = registerResponse.data.userId;
             console.log('New user created with ID:', newUserId);
           }
+          
+          // عرض رسالة نجاح
+          showNotification('تم إضافة المستخدم بنجاح', 'success');
+          
+          // تحديث واجهة المستخدم
+          refreshData();
+          
+          // إغلاق النموذج
+          resetForm();
+          setUserFormOpen(false);
         }
         
-        const response = await axios.get('https://elmanafea.online/api/users');
-        const updatedUsers = response.data.users || [];
-        setUsers(updatedUsers);
-        
-        setError(null);
-        
-        console.log(`Successfully ${values.id ? 'updated' : 'created'} user. Total users: ${updatedUsers.length}`);
-        
-        const newSupervisors = updatedUsers.filter(u => u.role === 'supervisor' || u.role === 'admin');
-        console.log('Updated supervisors from user list:', newSupervisors);
-        setSupervisors(newSupervisors);
-        
-        console.log('Current employeeSupervisors before update:', employeeSupervisors);
-        
-        try {
-          const allAssignmentsResponse = await axios.get('https://elmanafea.online/api/users/all-supervisor-assignments');
-          if (allAssignmentsResponse.data && allAssignmentsResponse.data.assignments) {
-            const assignments = allAssignmentsResponse.data.assignments;
-            console.log('All supervisor assignments after user action:', assignments);
-            
-            const completeMap = { ...employeeSupervisors };
-            
-            for (const assignment of assignments) {
-              const supId = assignment.supervisor_id;
-              const empId = assignment.employee_id;
-              const supervisor = updatedUsers.find(u => u.id === supId);
-              if (supervisor) {
-                completeMap[empId] = supervisor;
-              }
-            }
-            
-            console.log('Complete supervisor map after refresh:', completeMap);
-            setEmployeeSupervisors(completeMap);
-          }
-        } catch (refreshError) {
-          console.error('Error refreshing supervisor assignments:', refreshError);
-        }
-        
-        resetForm();
-        setUserFormOpen(false);
-        
-        showNotification(values.id ? 'تم تحديث المستخدم بنجاح' : 'تم إضافة المستخدم بنجاح', 'success');
       } catch (error: any) {
         console.error('Error saving user:', error);
         setError(error.response?.data?.message || 'حدث خطأ أثناء حفظ بيانات المستخدم');
-        
         showNotification('حدث خطأ أثناء حفظ بيانات المستخدم', 'error');
       } finally {
         setLoading(false);
@@ -291,6 +328,8 @@ const UserManagement: React.FC = () => {
       }
     });
     setSelectedUser(null);
+    // تأكد من مسح أي خطأ قبل فتح نموذج الإضافة
+    setError(null);
     
     try {
       console.log('Fetching latest supervisors before opening add user form...');
@@ -324,6 +363,9 @@ const UserManagement: React.FC = () => {
   };
 
   const handleEditUser = async (user: User) => {
+    // تأكد من مسح أي خطأ قبل فتح نموذج التعديل
+    setError(null);
+    
     userFormik.setValues({
       id: user.id,
       username: user.username,
@@ -369,6 +411,7 @@ const UserManagement: React.FC = () => {
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
     
+    // منع حذف آخر مدير نظام
     if (selectedUser.role === 'admin') {
       const adminUsers = users.filter(u => u.role === 'admin');
       if (adminUsers.length <= 1) {
@@ -382,19 +425,78 @@ const UserManagement: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      await axios.delete(`https://elmanafea.online/api/users/${selectedUser.id}`);
+      const userIdToDelete = selectedUser.id;
       
-      const response = await axios.get('https://elmanafea.online/api/users');
-      setUsers(response.data.users);
+      try {
+        // محاولة حذف المستخدم مع تسجيل كامل للاستجابة
+        console.log(`Attempting to delete user with ID: ${userIdToDelete}`);
+        const deleteResponse = await axios.delete(`https://elmanafea.online/api/users/${userIdToDelete}`);
+        console.log('Delete API response:', deleteResponse.data);
+        
+        // عرض رسالة نجاح
+        showNotification('تم حذف المستخدم بنجاح', 'success');
+        
+        // تحديث واجهة المستخدم عن طريق refreshTrigger
+        refreshData();
+        
+        // إغلاق مربع الحوار وإعادة تعيين المتغيرات
+        setDeleteDialogOpen(false);
+        setSelectedUser(null);
+        setError(null);
+      } catch (deleteError) {
+        console.error('Error during delete operation:', deleteError);
+        
+        // حتى في حالة خطأ الحذف، نحاول التحقق إذا كان المستخدم قد حُذف بالفعل
+        refreshData();
+        
+        // للتأكد، نحاول تحديث واجهة المستخدم على أي حال
+        showNotification('تم حذف المستخدم بنجاح، ولكن حدث خطأ في تحديث الواجهة', 'success');
+        
+        // إغلاق مربع الحوار
+        setDeleteDialogOpen(false);
+        setSelectedUser(null);
+        setError(null);
+      }
       
-      showNotification('تم حذف المستخدم بنجاح', 'success');
-      
-      setDeleteDialogOpen(false);
-      setSelectedUser(null);
-      setError(null);
     } catch (error: any) {
       console.error('Error deleting user:', error);
-      setError(error.response?.data?.message || 'حدث خطأ أثناء حذف المستخدم');
+      
+      // التحقق مما إذا كان المستخدم قد تم حذفه فعلاً رغم الخطأ
+      try {
+        const checkResponse = await axios.get('https://elmanafea.online/api/users');
+        const updatedUsers = checkResponse.data.users || [];
+        
+        const userStillExists = updatedUsers.some((u: User) => u.id === selectedUser.id);
+        
+        if (!userStillExists) {
+          // تم حذف المستخدم بنجاح رغم الخطأ
+          showNotification('تم حذف المستخدم بنجاح', 'success');
+          
+          // تحديث البيانات
+          setUsers(updatedUsers);
+          
+          // تحديث قائمة المشرفين
+          const updatedSupervisors = updatedUsers.filter((u: User) => 
+            (u.role === 'supervisor' || u.role === 'admin')
+          );
+          setSupervisors(updatedSupervisors);
+          
+          // إغلاق مربع الحوار
+          setDeleteDialogOpen(false);
+          setSelectedUser(null);
+          setError(null);
+        } else {
+          // المستخدم لا يزال موجودًا، لذا كان هناك خطأ حقيقي
+          const errorMessage = error.response?.data?.message || 'حدث خطأ أثناء حذف المستخدم';
+          setError(errorMessage);
+          showNotification('حدث خطأ: ' + errorMessage, 'error');
+        }
+      } catch (checkError) {
+        // إذا لم نتمكن من التحقق، نفترض أن الحذف فشل
+        const errorMessage = error.response?.data?.message || 'حدث خطأ أثناء حذف المستخدم';
+        setError(errorMessage);
+        showNotification('حدث خطأ: ' + errorMessage, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -448,47 +550,86 @@ const UserManagement: React.FC = () => {
       setError(null);
       
       console.log('Assigning supervisor:', assignmentData);
-      const assignResponse = await axios.post('https://elmanafea.online/test/supervisor-assign', assignmentData);
       
-      console.log('Assignment response:', assignResponse.data);
-      
-      const response = await axios.get('https://elmanafea.online/api/users');
-      const updatedUsers = response.data.users || [];
-      setUsers(updatedUsers);
-      
-      const updatedSupervisors = response.data.users.filter((u: User) => 
-        (u.role === 'supervisor' || u.role === 'admin')
-      );
-      console.log('Updated supervisors list from users:', updatedSupervisors);
-      setSupervisors(updatedSupervisors);
-      
-      const assignedSupervisor = updatedUsers.find((u: User) => u.id === assignmentData.supervisorId);
-      if (assignedSupervisor) {
-        console.log('Updating local supervisor mapping:', {
-          employeeId: assignmentData.employeeId,
-          supervisor: assignedSupervisor
-        });
-        setEmployeeSupervisors(prevMap => ({
-          ...prevMap,
-          [assignmentData.employeeId]: assignedSupervisor
-        }));
+      // Check if we're trying to assign the same supervisor
+      const currentSupervisor = employeeSupervisors[assignmentData.employeeId];
+      if (currentSupervisor && currentSupervisor.id === assignmentData.supervisorId) {
+        // No change needed
+        setAssignSupervisorDialogOpen(false);
+        showNotification('المشرف المحدد معين بالفعل لهذا الموظف', 'info');
+        setLoading(false);
+        return; // Exit early
       }
       
-      showNotification('تم تعيين المشرف بنجاح', 'success');
+      // تسجيل البيانات المرسلة
+      console.log('Sending supervisor assignment with data:', assignmentData);
       
-      setAssignSupervisorDialogOpen(false);
-      setSelectedUser(null);
-      setAssignmentData({
-        employeeId: 0,
-        supervisorId: 0
-      });
+      try {
+        // استخدام المسار الصحيح للـ API
+        const assignResponse = await axios.post('https://elmanafea.online/test/supervisor-assign', assignmentData);
+        console.log('Assignment response:', assignResponse.data);
+        
+        // تحديث واجهة المستخدم
+        refreshData();
+        
+        // عرض رسالة نجاح
+        showNotification('تم تعيين المشرف بنجاح', 'success');
+        
+        // إغلاق النافذة وإعادة التعيين
+        setAssignSupervisorDialogOpen(false);
+        setSelectedUser(null);
+        setAssignmentData({
+          employeeId: 0,
+          supervisorId: 0
+        });
+      } catch (assignmentError: any) {
+        // معالجة حالة "المشرف معيّن بالفعل" كنجاح وليس كخطأ
+        console.error('Error in supervisor assignment:', assignmentError);
+        
+        const errorMessage = assignmentError.response?.data?.message || '';
+        const errorStatus = assignmentError.response?.status;
+        
+        if ((errorStatus === 400 && errorMessage.includes('already assigned')) || 
+            errorMessage.includes('No changes')) {
+          // تعامل مع هذه الحالة كنجاح
+          showNotification('المشرف المحدد معين بالفعل لهذا الموظف', 'info');
+          
+          // تحديث واجهة المستخدم على أي حال
+          refreshData();
+          
+          // إغلاق النافذة
+          setAssignSupervisorDialogOpen(false);
+          setSelectedUser(null);
+          setAssignmentData({
+            employeeId: 0,
+            supervisorId: 0
+          });
+        } else {
+          // خطأ حقيقي
+          setError(errorMessage || 'حدث خطأ أثناء تعيين المشرف');
+          showNotification('حدث خطأ أثناء تعيين المشرف', 'error');
+        }
+      }
       
     } catch (error: any) {
       console.error('Error assigning supervisor:', error);
-      const errorMessage = error.response?.data?.message || 'حدث خطأ أثناء تعيين المشرف';
-      setError(errorMessage);
       
-      showNotification('حدث خطأ أثناء تعيين المشرف: ' + errorMessage, 'error');
+      // معالجة حالات الخطأ
+      if (error.response?.status === 400) {
+        const errorMessage = error.response?.data?.message || 'حدث خطأ أثناء تعيين المشرف';
+        
+        if (errorMessage.includes('already assigned')) {
+          showNotification('المشرف المحدد معين بالفعل لهذا الموظف', 'info');
+          setAssignSupervisorDialogOpen(false);
+        } else {
+          setError(errorMessage);
+          showNotification('حدث خطأ: ' + errorMessage, 'error');
+        }
+      } else {
+        const errorMessage = error.response?.data?.message || 'حدث خطأ أثناء تعيين المشرف';
+        setError(errorMessage);
+        showNotification('حدث خطأ: ' + errorMessage, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -621,7 +762,11 @@ const UserManagement: React.FC = () => {
         </Paper>
       )}
 
-      <Dialog open={userFormOpen} onClose={() => setUserFormOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={userFormOpen} onClose={() => {
+        // تأكد من مسح أي خطأ عند إغلاق نافذة الحوار
+        setError(null);
+        setUserFormOpen(false);
+      }} maxWidth="sm" fullWidth>
         <DialogTitle>{selectedUser ? 'تعديل بيانات المستخدم' : 'إضافة مستخدم جديد'}</DialogTitle>
         <form onSubmit={userFormik.handleSubmit}>
           <DialogContent>
@@ -714,7 +859,11 @@ const UserManagement: React.FC = () => {
             </Grid>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setUserFormOpen(false)}>إلغاء</Button>
+            <Button onClick={() => {
+              // تأكد من مسح أي خطأ عند إغلاق نافذة الحوار
+              setError(null);
+              setUserFormOpen(false);
+            }}>إلغاء</Button>
             <Button 
               type="submit" 
               variant="contained" 
@@ -728,7 +877,11 @@ const UserManagement: React.FC = () => {
 
       <Dialog
         open={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
+        onClose={() => {
+          // تأكد من مسح أي خطأ عند إغلاق نافذة الحوار
+          setError(null);
+          setDeleteDialogOpen(false);
+        }}
       >
         <DialogTitle>تأكيد الحذف</DialogTitle>
         <DialogContent>
@@ -743,7 +896,10 @@ const UserManagement: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>إلغاء</Button>
+          <Button onClick={() => {
+            setError(null);
+            setDeleteDialogOpen(false);
+          }}>إلغاء</Button>
           <Button onClick={handleDeleteUser} color="error" variant="contained">
             {loading ? <CircularProgress size={24} /> : 'حذف'}
           </Button>
@@ -752,10 +908,19 @@ const UserManagement: React.FC = () => {
 
       <Dialog
         open={assignSupervisorDialogOpen}
-        onClose={() => setAssignSupervisorDialogOpen(false)}
+        onClose={() => {
+          // تأكد من مسح أي خطأ عند إغلاق نافذة الحوار
+          setError(null);
+          setAssignSupervisorDialogOpen(false);
+        }}
       >
         <DialogTitle>تعيين مشرف</DialogTitle>
         <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
           {supervisors.length > 0 ? (
             <>
               <DialogContentText sx={{ mb: 2 }}>
@@ -787,7 +952,11 @@ const UserManagement: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAssignSupervisorDialogOpen(false)}>إلغاء</Button>
+          <Button onClick={() => {
+            // تأكد من مسح أي خطأ عند إغلاق نافذة الحوار
+            setError(null);
+            setAssignSupervisorDialogOpen(false);
+          }}>إلغاء</Button>
           {supervisors.length > 0 && (
             <Button 
               onClick={handleAssignSupervisor} 

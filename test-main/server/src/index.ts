@@ -9,6 +9,7 @@ import fs from 'fs';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import reportRoutes from './routes/reports';
+import reportDetailRoutes from './routes/reportDetail';
 import attendanceRoutes from './routes/attendance';
 import activityRoutes from './routes/activities';
 import dashboardRoutes from './routes/dashboard';
@@ -70,6 +71,7 @@ console.log('Registering user routes...');
 app.use('/api/users', userRoutes);
 
 app.use('/api/reports', reportRoutes);
+app.use('/api/report-details', reportDetailRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/activities', activityRoutes);
 app.use('/api/dashboard', dashboardRoutes);

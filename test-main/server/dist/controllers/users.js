@@ -89,6 +89,10 @@ class UserController {
             try {
                 const userId = parseInt(req.params.id);
                 const { full_name, phone, nationality, location, role } = req.body;
+                console.log('Updating user:', {
+                    userId,
+                    updates: { full_name, phone, nationality, location, role }
+                });
                 if (isNaN(userId)) {
                     return res.status(400).json({ message: 'Invalid user ID' });
                 }
@@ -97,18 +101,45 @@ class UserController {
                 if (!user) {
                     return res.status(404).json({ message: 'User not found' });
                 }
-                // Update user
-                const updated = yield user_1.default.update(userId, {
+                // Check for any changes before updating
+                const currentValues = {
+                    full_name: user.full_name,
+                    phone: user.phone || null,
+                    nationality: user.nationality || null,
+                    location: user.location || null,
+                    role: user.role
+                };
+                const updates = {
                     full_name,
-                    phone,
-                    nationality,
-                    location,
+                    phone: phone || null,
+                    nationality: nationality || null,
+                    location: location || null,
                     role: role
+                };
+                // Compare if any field has changed
+                const hasChanges = Object.keys(updates).some(key => {
+                    // @ts-ignore
+                    return updates[key] !== currentValues[key];
                 });
-                if (!updated) {
-                    return res.status(400).json({ message: 'No changes were made' });
+                if (!hasChanges) {
+                    console.log('No changes detected during update for user:', userId);
+                    return res.status(200).json({
+                        message: 'No changes were detected',
+                        success: true
+                    });
                 }
-                return res.status(200).json({ message: 'User updated successfully' });
+                // Update user if there are changes
+                const updated = yield user_1.default.update(userId, updates);
+                if (!updated) {
+                    console.log('Update operation returned false for user:', userId);
+                    return res.status(200).json({
+                        message: 'No changes were made',
+                        success: true,
+                        details: 'The database reported no changes were made'
+                    });
+                }
+                console.log('User updated successfully:', userId);
+                return res.status(200).json({ message: 'User updated successfully', success: true });
             }
             catch (error) {
                 console.error('Update user error:', error);
@@ -129,12 +160,37 @@ class UserController {
                 if (!user) {
                     return res.status(404).json({ message: 'User not found' });
                 }
-                // Delete user
-                const deleted = yield user_1.default.delete(userId);
-                if (!deleted) {
-                    return res.status(500).json({ message: 'Failed to delete user' });
+                try {
+                    // Delete user
+                    const deleted = yield user_1.default.delete(userId);
+                    if (!deleted) {
+                        return res.status(500).json({ message: 'Failed to delete user' });
+                    }
+                    return res.status(200).json({ message: 'User deleted successfully' });
                 }
-                return res.status(200).json({ message: 'User deleted successfully' });
+                catch (deleteError) {
+                    console.error('Error during user deletion:', deleteError);
+                    // Check if this might be a foreign key constraint error
+                    // but the delete may have actually succeeded due to database cascading
+                    const errorMessage = deleteError.message || String(deleteError);
+                    // After attempting deletion, try to verify if the user still exists
+                    try {
+                        const userStillExists = yield user_1.default.getById(userId);
+                        if (!userStillExists) {
+                            // User was actually deleted despite the error
+                            console.log(`User ${userId} no longer exists - delete likely succeeded despite error`);
+                            return res.status(200).json({
+                                message: 'User deleted successfully',
+                                note: 'Operation succeeded despite database constraint issues'
+                            });
+                        }
+                    }
+                    catch (verifyError) {
+                        console.error('Error verifying user existence after delete attempt:', verifyError);
+                    }
+                    // Rethrow if user still exists
+                    throw deleteError;
+                }
             }
             catch (error) {
                 console.error('Delete user error:', error);
@@ -264,6 +320,16 @@ class UserController {
                 // Check if supervisor is actually a supervisor or admin
                 if (supervisor.role !== 'supervisor' && supervisor.role !== 'admin') {
                     return res.status(400).json({ message: 'User is not a supervisor or admin' });
+                }
+                // Check if employee already has this supervisor assigned
+                const currentSupervisor = yield user_1.default.getSupervisorForEmployee(empId);
+                if (currentSupervisor && currentSupervisor.id === supId) {
+                    // Not an error - just no change needed
+                    return res.status(200).json({
+                        message: 'Supervisor is already assigned to this employee',
+                        success: true,
+                        noChangesNeeded: true
+                    });
                 }
                 // Assign supervisor - استخدام القيم المحولة بدلاً من القيم الأصلية
                 const assigned = yield user_1.default.assignSupervisor(empId, supId);

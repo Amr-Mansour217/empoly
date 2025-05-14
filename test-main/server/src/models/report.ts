@@ -8,6 +8,15 @@ interface Report {
   location?: string;
   report_date: string; // YYYY-MM-DD format
   submitted_at?: Date;
+  lesson1_beneficiaries?: number;
+  lesson1_time?: string;
+  lesson1_completed?: boolean;
+  lesson2_beneficiaries?: number;
+  lesson2_time?: string;
+  lesson2_completed?: boolean;
+  quran_session_beneficiaries?: number;
+  quran_session_time?: string;
+  quran_session_completed?: boolean;
 }
 
 interface ReportWithDetails extends Report {
@@ -18,7 +27,40 @@ interface ReportWithDetails extends Report {
 class ReportModel {
   // Create a new report
   async create(reportData: Report): Promise<number> {
-    const { employee_id, activity_type_id, beneficiaries_count, location, report_date } = reportData;
+    const { 
+      employee_id, 
+      activity_type_id, 
+      beneficiaries_count, 
+      location, 
+      report_date,
+      lesson1_beneficiaries,
+      lesson1_time,
+      lesson1_completed,
+      lesson2_beneficiaries,
+      lesson2_time,
+      lesson2_completed,
+      quran_session_beneficiaries,
+      quran_session_time,
+      quran_session_completed
+    } = reportData;
+    
+    // تحديد حالة إكمال الدروس بناءً على عدد المستفيدين
+    const l1_beneficiaries = Number(lesson1_beneficiaries || 0);
+    const l2_beneficiaries = Number(lesson2_beneficiaries || 0);
+    const quran_beneficiaries = Number(quran_session_beneficiaries || 0);
+    
+    const l1_completed = l1_beneficiaries > 0;
+    const l2_completed = l2_beneficiaries > 0;
+    const quran_completed = quran_beneficiaries > 0;
+    
+    console.log('Creating/updating report with data:', {
+      lesson1_beneficiaries: l1_beneficiaries,
+      lesson1_completed: l1_completed,
+      lesson2_beneficiaries: l2_beneficiaries,
+      lesson2_completed: l2_completed,
+      quran_session_beneficiaries: quran_beneficiaries,
+      quran_session_completed: quran_completed
+    });
     
     // Check if report already exists for this date and employee
     const [existing]: any = await pool.execute(
@@ -27,18 +69,77 @@ class ReportModel {
     );
     
     if (existing.length > 0) {
-      // Update existing report
+      // Update existing report with lesson data
       await pool.execute(
-        'UPDATE daily_reports SET activity_type_id = ?, beneficiaries_count = ?, location = ?, submitted_at = NOW() WHERE employee_id = ? AND report_date = ?',
-        [activity_type_id, beneficiaries_count, location || null, employee_id, report_date]
+        `UPDATE daily_reports SET 
+          activity_type_id = ?, 
+          beneficiaries_count = ?, 
+          location = ?, 
+          submitted_at = NOW(),
+          lesson1_beneficiaries = ?,
+          lesson1_time = ?,
+          lesson1_completed = ?,
+          lesson2_beneficiaries = ?,
+          lesson2_time = ?,
+          lesson2_completed = ?,
+          quran_session_beneficiaries = ?,
+          quran_session_time = ?,
+          quran_session_completed = ?
+        WHERE employee_id = ? AND report_date = ?`,
+        [
+          activity_type_id, 
+          beneficiaries_count, 
+          location || null,
+          lesson1_beneficiaries || 0,
+          lesson1_time || null,
+          l1_completed ? 1 : 0,
+          lesson2_beneficiaries || 0,
+          lesson2_time || null,
+          l2_completed ? 1 : 0,
+          quran_session_beneficiaries || 0,
+          quran_session_time || null,
+          quran_completed ? 1 : 0,
+          employee_id, 
+          report_date
+        ]
       );
       return existing[0].id;
     }
     
-    // Create new report
+    // Create new report with lesson data
     const [result]: any = await pool.execute(
-      'INSERT INTO daily_reports (employee_id, activity_type_id, beneficiaries_count, location, report_date) VALUES (?, ?, ?, ?, ?)',
-      [employee_id, activity_type_id, beneficiaries_count, location || null, report_date]
+      `INSERT INTO daily_reports (
+        employee_id, 
+        activity_type_id, 
+        beneficiaries_count, 
+        location, 
+        report_date,
+        lesson1_beneficiaries,
+        lesson1_time,
+        lesson1_completed,
+        lesson2_beneficiaries,
+        lesson2_time,
+        lesson2_completed,
+        quran_session_beneficiaries,
+        quran_session_time,
+        quran_session_completed
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        employee_id, 
+        activity_type_id, 
+        beneficiaries_count, 
+        location || null, 
+        report_date,
+        lesson1_beneficiaries || 0,
+        lesson1_time || null,
+        l1_completed ? 1 : 0,
+        lesson2_beneficiaries || 0,
+        lesson2_time || null,
+        l2_completed ? 1 : 0,
+        quran_session_beneficiaries || 0,
+        quran_session_time || null,
+        quran_completed ? 1 : 0
+      ]
     );
     
     // Mark attendance as present
@@ -58,7 +159,98 @@ class ReportModel {
       [id]
     );
     
-    return rows.length ? rows[0] : null;
+    if (!rows.length) return null;
+    
+    // تحويل البيانات وتنظيفها للتأكد من صحة أنواع البيانات
+    const report = rows[0];
+    
+    // تعيين قيم افتراضية في حال عدم وجود الحقول في قاعدة البيانات
+    if (report.lesson1_beneficiaries === undefined) {
+      report.lesson1_beneficiaries = 0;
+      report.lesson1_time = null;
+      report.lesson1_completed = false;
+    }
+    
+    if (report.lesson2_beneficiaries === undefined) {
+      report.lesson2_beneficiaries = 0;
+      report.lesson2_time = null;
+      report.lesson2_completed = false;
+    }
+    
+    if (report.quran_session_beneficiaries === undefined) {
+      report.quran_session_beneficiaries = 0;
+      report.quran_session_time = null;
+      report.quran_session_completed = false;
+    }
+    
+    // تحويل عدد المستفيدين إلى أرقام
+    report.lesson1_beneficiaries = Number(report.lesson1_beneficiaries) || 0;
+    report.lesson2_beneficiaries = Number(report.lesson2_beneficiaries) || 0;
+    report.quran_session_beneficiaries = Number(report.quran_session_beneficiaries) || 0;
+    
+    // تحديد حالة اكتمال الدرس بناءً على عدد المستفيدين فقط - هذا سيتجاهل أي قيمة محفوظة في حقل الإكمال
+    report.lesson1_completed = report.lesson1_beneficiaries > 0;
+    report.lesson2_completed = report.lesson2_beneficiaries > 0;
+    report.quran_session_completed = report.quran_session_beneficiaries > 0;
+    
+    return report;
+  }
+  
+  // Update an existing report
+  async update(reportData: Report): Promise<boolean> {
+    try {
+      if (!reportData.id) {
+        throw new Error('معرف التقرير مطلوب للتحديث');
+      }
+      
+      // تحديد حالة إكمال الدروس بناءً على عدد المستفيدين
+      const lesson1Beneficiaries = Number(reportData.lesson1_beneficiaries || 0);
+      const lesson2Beneficiaries = Number(reportData.lesson2_beneficiaries || 0);
+      const quranSessionBeneficiaries = Number(reportData.quran_session_beneficiaries || 0);
+      
+      // تحويل البيانات البولينية إلى 0 أو 1 للتخزين في قاعدة البيانات - اعتماداً على عدد المستفيدين فقط
+      const lesson1CompletedValue = lesson1Beneficiaries > 0 ? 1 : 0;
+      const lesson2CompletedValue = lesson2Beneficiaries > 0 ? 1 : 0;
+      const quranSessionCompletedValue = quranSessionBeneficiaries > 0 ? 1 : 0;
+      
+      await pool.execute(
+        `UPDATE daily_reports SET 
+          activity_type_id = ?, 
+          beneficiaries_count = ?, 
+          location = ?, 
+          submitted_at = NOW(),
+          lesson1_beneficiaries = ?,
+          lesson1_time = ?,
+          lesson1_completed = ?,
+          lesson2_beneficiaries = ?,
+          lesson2_time = ?,
+          lesson2_completed = ?,
+          quran_session_beneficiaries = ?,
+          quran_session_time = ?,
+          quran_session_completed = ?
+        WHERE id = ?`,
+        [
+          reportData.activity_type_id, 
+          reportData.beneficiaries_count, 
+          reportData.location || null,
+          reportData.lesson1_beneficiaries || 0,
+          reportData.lesson1_time || null,
+          lesson1CompletedValue,
+          reportData.lesson2_beneficiaries || 0,
+          reportData.lesson2_time || null,
+          lesson2CompletedValue,
+          reportData.quran_session_beneficiaries || 0,
+          reportData.quran_session_time || null,
+          quranSessionCompletedValue,
+          reportData.id
+        ]
+      );
+      
+      return true;
+    } catch (error) {
+      console.error('خطأ في تحديث التقرير:', error);
+      return false;
+    }
   }
   
   // Get reports by employee ID
@@ -336,4 +528,4 @@ class ReportModel {
   }
 }
 
-export default new ReportModel(); 
+export default new ReportModel();

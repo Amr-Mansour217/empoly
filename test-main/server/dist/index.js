@@ -13,6 +13,7 @@ const fs_1 = __importDefault(require("fs"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const users_1 = __importDefault(require("./routes/users"));
 const reports_1 = __importDefault(require("./routes/reports"));
+const reportDetail_1 = __importDefault(require("./routes/reportDetail"));
 const attendance_1 = __importDefault(require("./routes/attendance"));
 const activities_1 = __importDefault(require("./routes/activities"));
 const dashboard_1 = __importDefault(require("./routes/dashboard"));
@@ -63,6 +64,7 @@ console.log('Registering user routes...');
 // The path prefix should match what you're using in Postman
 app.use('/api/users', users_1.default);
 app.use('/api/reports', reports_1.default);
+app.use('/api/report-details', reportDetail_1.default);
 app.use('/api/attendance', attendance_1.default);
 app.use('/api/activities', activities_1.default);
 app.use('/api/dashboard', dashboard_1.default);

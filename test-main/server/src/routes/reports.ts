@@ -8,6 +8,9 @@ const router = express.Router();
 router.post('/', authenticateToken, reportController.createReport);
 router.get('/me/current', authenticateToken, reportController.getCurrentEmployeeReport);
 
+// تحديث التقرير الحالي للموظف
+router.post('/today/:id', authenticateToken, isOwnerOrSupervisor, reportController.updateReport);
+
 // Admin and supervisor routes
 router.get('/', authenticateToken, isSupervisor, reportController.getAllReports);
 router.get('/stats', authenticateToken, isSupervisor, reportController.getSummaryStats);
@@ -16,4 +19,4 @@ router.get('/stats', authenticateToken, isSupervisor, reportController.getSummar
 router.get('/:id', authenticateToken, isOwnerOrSupervisor, reportController.getReportById);
 router.get('/employee/:id', authenticateToken, isOwnerOrSupervisor, reportController.getReportsByEmployeeId);
 
-export default router; 
+export default router;

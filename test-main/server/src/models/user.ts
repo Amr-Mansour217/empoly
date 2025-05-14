@@ -115,16 +115,47 @@ class UserModel {
       throw error;
     }
   }
-  
-  // Delete user
+    // Delete user
   async delete(id: number): Promise<boolean> {
     try {
-      const [result]: any = await pool.execute(
-        'DELETE FROM users WHERE id = ?',
-        [id]
-      );
+      console.log(`Attempting to delete user with ID: ${id}`);
       
-      return result && result.affectedRows > 0;
+      // Begin transaction to ensure data consistency
+      await pool.execute('START TRANSACTION');
+      
+      try {
+        // 1. First remove any supervisor assignments where this user is an employee
+        console.log(`Removing employee-supervisor records where employee_id = ${id}`);
+        await pool.execute(
+          'DELETE FROM employee_supervisors WHERE employee_id = ?',
+          [id]
+        );
+        
+        // 2. Then remove any supervisor assignments where this user is a supervisor
+        console.log(`Removing employee-supervisor records where supervisor_id = ${id}`);
+        await pool.execute(
+          'DELETE FROM employee_supervisors WHERE supervisor_id = ?',
+          [id]
+        );
+        
+        // 3. Finally delete the user
+        console.log(`Deleting user from users table with id = ${id}`);
+        const [result]: any = await pool.execute(
+          'DELETE FROM users WHERE id = ?',
+          [id]
+        );
+        
+        // Commit the transaction if everything succeeded
+        await pool.execute('COMMIT');
+        
+        console.log(`User deletion result: ${JSON.stringify(result)}`);
+        return result && result.affectedRows > 0;
+      } catch (transactionError) {
+        // Rollback on error
+        console.error('Error in delete transaction, rolling back:', transactionError);
+        await pool.execute('ROLLBACK');
+        throw transactionError;
+      }
     } catch (error) {
       console.error('Error deleting user:', error);
       throw error;

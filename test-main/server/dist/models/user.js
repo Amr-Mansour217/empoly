@@ -96,8 +96,30 @@ class UserModel {
     delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const [result] = yield db_1.pool.execute('DELETE FROM users WHERE id = ?', [id]);
-                return result && result.affectedRows > 0;
+                console.log(`Attempting to delete user with ID: ${id}`);
+                // Begin transaction to ensure data consistency
+                yield db_1.pool.execute('START TRANSACTION');
+                try {
+                    // 1. First remove any supervisor assignments where this user is an employee
+                    console.log(`Removing employee-supervisor records where employee_id = ${id}`);
+                    yield db_1.pool.execute('DELETE FROM employee_supervisors WHERE employee_id = ?', [id]);
+                    // 2. Then remove any supervisor assignments where this user is a supervisor
+                    console.log(`Removing employee-supervisor records where supervisor_id = ${id}`);
+                    yield db_1.pool.execute('DELETE FROM employee_supervisors WHERE supervisor_id = ?', [id]);
+                    // 3. Finally delete the user
+                    console.log(`Deleting user from users table with id = ${id}`);
+                    const [result] = yield db_1.pool.execute('DELETE FROM users WHERE id = ?', [id]);
+                    // Commit the transaction if everything succeeded
+                    yield db_1.pool.execute('COMMIT');
+                    console.log(`User deletion result: ${JSON.stringify(result)}`);
+                    return result && result.affectedRows > 0;
+                }
+                catch (transactionError) {
+                    // Rollback on error
+                    console.error('Error in delete transaction, rolling back:', transactionError);
+                    yield db_1.pool.execute('ROLLBACK');
+                    throw transactionError;
+                }
             }
             catch (error) {
                 console.error('Error deleting user:', error);

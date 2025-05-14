@@ -26,6 +26,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import SearchIcon from '@mui/icons-material/Search';
+import ReportDetailsDialog from '../components/ReportDetailsDialog';
 
 interface Report {
   id: number;
@@ -54,6 +55,10 @@ const Reports: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  
+  // متغيرات حالة عرض تفاصيل التقرير
+  const [viewingReport, setViewingReport] = useState<Report | null>(null);
+  const [showReportDetails, setShowReportDetails] = useState<boolean>(false);
   
   // Filter states
   const today = new Date().toISOString().split('T')[0];
@@ -248,6 +253,12 @@ const Reports: React.FC = () => {
 
   const handleSupervisorChange = (event: React.ChangeEvent<HTMLInputElement> | { target: { value: unknown } }) => {
     setSelectedSupervisor(event.target.value as number);
+  };
+  
+  // دالة لعرض تفاصيل التقرير عند النقر على الزر
+  const handleViewReportDetails = (report: Report) => {
+    setViewingReport(report);
+    setShowReportDetails(true);
   };
 
   const handleSearch = () => {
@@ -450,8 +461,15 @@ const Reports: React.FC = () => {
                     <TableCell>{report.full_name}</TableCell>
                     <TableCell>{report.has_submitted ? report.beneficiaries_count : '-'}</TableCell>
                     <TableCell>
-                      {report.has_submitted && report.location ? (
-                        report.location
+                      {report.has_submitted ? (
+                        <Chip 
+                          label="تم تقديم التقرير" 
+                          size="small" 
+                          color="success" 
+                          variant="outlined"
+                          onClick={() => handleViewReportDetails(report)}
+                          sx={{ cursor: 'pointer' }}
+                        />
                       ) : (
                         <Chip 
                           label="لم يتم تقديم تقرير" 
@@ -516,6 +534,18 @@ const Reports: React.FC = () => {
             يمكنك عرض تقارير الموظفين التابعين لكل مشرف عن طريق اختيار المشرف أولاً
           </Typography>
         </Box>
+      )}
+
+      {/* نافذة تفاصيل التقرير */}
+      {viewingReport && (
+        <ReportDetailsDialog
+          open={showReportDetails}
+          onClose={() => setShowReportDetails(false)}
+          employeeId={viewingReport.employee_id}
+          employeeName={viewingReport.full_name}
+          reportDate={viewingReport.report_date}
+          reportId={viewingReport.id}
+        />
       )}
     </Layout>
   );
