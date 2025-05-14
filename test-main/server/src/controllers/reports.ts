@@ -46,15 +46,34 @@ class ReportController {
       });
       
       // تحويل قيم المستفيدين إلى أرقام وتحديد حالة الاكتمال اعتماداً عليها
-      const l1_beneficiaries = Number(lesson1_beneficiaries || 0);
-      const l2_beneficiaries = Number(lesson2_beneficiaries || 0);
-      const qs_beneficiaries = Number(quran_session_beneficiaries || 0);
+      // تحويل البيانات إلى أرقام وضمان أنها ليست قيم خاطئة مثل NaN أو undefined
+      const l1_beneficiaries = Math.max(0, Number(lesson1_beneficiaries || 0) || 0);
+      const l2_beneficiaries = Math.max(0, Number(lesson2_beneficiaries || 0) || 0);
+      const qs_beneficiaries = Math.max(0, Number(quran_session_beneficiaries || 0) || 0);
+      
+      // حساب إجمالي عدد المستفيدين من جميع الدروس
+      const totalBeneficiaries = l1_beneficiaries + l2_beneficiaries + qs_beneficiaries;
+      
+      // تحديث إجمالي المستفيدين إذا لم يُحدد أو كان أقل من مجموع الدروس
+      const calculatedBeneficiaries = Math.max(
+        Number(beneficiaries_count) || 0,
+        totalBeneficiaries
+      );
+      
+      console.log('بيانات المستفيدين المعالجة:', {
+        lesson1: l1_beneficiaries,
+        lesson2: l2_beneficiaries,
+        quranSession: qs_beneficiaries,
+        providedTotal: beneficiaries_count,
+        calculatedTotal: totalBeneficiaries,
+        finalTotal: calculatedBeneficiaries
+      });
       
       // Create report
       const reportId = await reportModel.create({
         employee_id,
         activity_type_id,
-        beneficiaries_count,
+        beneficiaries_count: calculatedBeneficiaries, // استخدام القيمة المحسوبة
         location,
         report_date: today,
         lesson1_beneficiaries: l1_beneficiaries,
@@ -225,15 +244,47 @@ class ReportController {
       console.error('Get reports by employee ID error:', error);
       return res.status(500).json({ message: 'An error occurred while getting reports' });
     }
-  }
-  
-  // Get report for current employee and date
+  }    // Get report for current employee and date
   async getCurrentEmployeeReport(req: Request, res: Response) {
     try {
       const employeeId = req.user.id;
       const date = req.query.date as string || new Date().toISOString().split('T')[0];
       
       const report = await reportModel.getByEmployeeAndDate(employeeId, date);
+      
+      // إذا كان هناك تقرير، نتأكد من معالجة البيانات بشكل صحيح
+      if (report) {
+        // نتأكد من تحويل أعداد المستفيدين إلى أرقام
+        report.lesson1_beneficiaries = Number(report.lesson1_beneficiaries || 0);
+        report.lesson2_beneficiaries = Number(report.lesson2_beneficiaries || 0);
+        report.quran_session_beneficiaries = Number(report.quran_session_beneficiaries || 0);
+        
+        // تحديد حالة إكمال الدروس بناءً على عدد المستفيدين
+        report.lesson1_completed = report.lesson1_beneficiaries > 0;
+        report.lesson2_completed = report.lesson2_beneficiaries > 0;
+        report.quran_session_completed = report.quran_session_beneficiaries > 0;
+        
+        // التأكد من أن إجمالي المستفيدين على الأقل يساوي مجموع مستفيدي الدروس الفردية
+        const totalFromLessons = report.lesson1_beneficiaries + report.lesson2_beneficiaries + report.quran_session_beneficiaries;
+        report.beneficiaries_count = Math.max(Number(report.beneficiaries_count || 0), totalFromLessons);
+        
+        console.log('جلب تقرير للموظف الحالي:', {
+          id: report.id,
+          total: report.beneficiaries_count,
+          lesson1: {
+            beneficiaries: report.lesson1_beneficiaries,
+            completed: report.lesson1_completed
+          },
+          lesson2: {
+            beneficiaries: report.lesson2_beneficiaries,
+            completed: report.lesson2_completed
+          },
+          quranSession: {
+            beneficiaries: report.quran_session_beneficiaries,
+            completed: report.quran_session_completed
+          }
+        });
+      }
       
       return res.status(200).json({
         report: report || null,

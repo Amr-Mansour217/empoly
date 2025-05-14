@@ -164,34 +164,70 @@ class ReportModel {
     // تحويل البيانات وتنظيفها للتأكد من صحة أنواع البيانات
     const report = rows[0];
     
+    // تسجيل البيانات الخام قبل المعالجة للتشخيص
+    console.log('البيانات الخام المستلمة من قاعدة البيانات للتقرير:', {
+      id: report.id,
+      lesson1_beneficiaries: report.lesson1_beneficiaries,
+      lesson1_completed: report.lesson1_completed,
+      lesson2_beneficiaries: report.lesson2_beneficiaries,
+      lesson2_completed: report.lesson2_completed,
+      quran_session_beneficiaries: report.quran_session_beneficiaries,
+      quran_session_completed: report.quran_session_completed
+    });
+    
     // تعيين قيم افتراضية في حال عدم وجود الحقول في قاعدة البيانات
-    if (report.lesson1_beneficiaries === undefined) {
+    if (report.lesson1_beneficiaries === undefined || report.lesson1_beneficiaries === null) {
       report.lesson1_beneficiaries = 0;
       report.lesson1_time = null;
       report.lesson1_completed = false;
     }
     
-    if (report.lesson2_beneficiaries === undefined) {
+    if (report.lesson2_beneficiaries === undefined || report.lesson2_beneficiaries === null) {
       report.lesson2_beneficiaries = 0;
       report.lesson2_time = null;
       report.lesson2_completed = false;
     }
     
-    if (report.quran_session_beneficiaries === undefined) {
+    if (report.quran_session_beneficiaries === undefined || report.quran_session_beneficiaries === null) {
       report.quran_session_beneficiaries = 0;
       report.quran_session_time = null;
       report.quran_session_completed = false;
     }
     
-    // تحويل عدد المستفيدين إلى أرقام
+    // تحويل عدد المستفيدين إلى أرقام بطريقة آمنة
     report.lesson1_beneficiaries = Number(report.lesson1_beneficiaries) || 0;
     report.lesson2_beneficiaries = Number(report.lesson2_beneficiaries) || 0;
     report.quran_session_beneficiaries = Number(report.quran_session_beneficiaries) || 0;
+    report.beneficiaries_count = Number(report.beneficiaries_count) || 0;
     
-    // تحديد حالة اكتمال الدرس بناءً على عدد المستفيدين فقط - هذا سيتجاهل أي قيمة محفوظة في حقل الإكمال
+    // تحديد حالة اكتمال الدرس بناءً على عدد المستفيدين بشكل صريح
     report.lesson1_completed = report.lesson1_beneficiaries > 0;
     report.lesson2_completed = report.lesson2_beneficiaries > 0;
     report.quran_session_completed = report.quran_session_beneficiaries > 0;
+    
+    // التأكد من أن إجمالي المستفيدين متناسق مع مجموع مستفيدي الدروس الفردية
+    const calculatedTotal = report.lesson1_beneficiaries + report.lesson2_beneficiaries + report.quran_session_beneficiaries;
+    if (calculatedTotal > report.beneficiaries_count) {
+      report.beneficiaries_count = calculatedTotal;
+    }
+    
+    // تسجيل البيانات بعد المعالجة للتشخيص
+    console.log('البيانات بعد المعالجة للتقرير:', {
+      id: report.id,
+      total: report.beneficiaries_count,
+      lesson1: {
+        beneficiaries: report.lesson1_beneficiaries,
+        completed: report.lesson1_completed
+      },
+      lesson2: {
+        beneficiaries: report.lesson2_beneficiaries,
+        completed: report.lesson2_completed
+      },
+      quranSession: {
+        beneficiaries: report.quran_session_beneficiaries,
+        completed: report.quran_session_completed
+      }
+    });
     
     return report;
   }
@@ -274,7 +310,28 @@ class ReportModel {
       [employeeId, date]
     );
     
-    return rows.length ? rows[0] : null;
+    if (!rows.length) return null;
+    
+    const report = rows[0];
+    
+    // تحويل أعداد المستفيدين إلى أرقام
+    report.lesson1_beneficiaries = Number(report.lesson1_beneficiaries || 0);
+    report.lesson2_beneficiaries = Number(report.lesson2_beneficiaries || 0);
+    report.quran_session_beneficiaries = Number(report.quran_session_beneficiaries || 0);
+    report.beneficiaries_count = Number(report.beneficiaries_count || 0);
+    
+    // تحديد حالة إكمال الدروس بناءً على عدد المستفيدين
+    report.lesson1_completed = report.lesson1_beneficiaries > 0;
+    report.lesson2_completed = report.lesson2_beneficiaries > 0;
+    report.quran_session_completed = report.quran_session_beneficiaries > 0;
+    
+    // التأكد من أن إجمالي المستفيدين على الأقل يساوي مجموع مستفيدي الدروس الفردية
+    const totalFromLessons = report.lesson1_beneficiaries + report.lesson2_beneficiaries + report.quran_session_beneficiaries;
+    if (report.beneficiaries_count < totalFromLessons) {
+      report.beneficiaries_count = totalFromLessons;
+    }
+    
+    return report;
   }
   
   // Get all reports - modified to include all employees

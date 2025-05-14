@@ -97,7 +97,15 @@ const ReportDetailsDialog: React.FC<ReportDetailsProps> = ({
         reportData.lesson2_completed = reportData.lesson2_beneficiaries > 0;
         reportData.quran_session_completed = reportData.quran_session_beneficiaries > 0;
         
+        // ضمان أن بيانات التقرير تعكس عدد المستفيدين الفعلي في الحسابات
+        // إذا كان عدد المستفيدين الإجمالي أقل من مجموع المستفيدين في الدروس الثلاثة
+        const calculatedTotal = reportData.lesson1_beneficiaries + reportData.lesson2_beneficiaries + reportData.quran_session_beneficiaries;
+        if (reportData.beneficiaries_count < calculatedTotal) {
+          reportData.beneficiaries_count = calculatedTotal;
+        }
+        
         console.log('بيانات التقرير بعد المعالجة:', {
+          total: reportData.beneficiaries_count,
           lesson1: {
             beneficiaries: reportData.lesson1_beneficiaries,
             completed: reportData.lesson1_completed

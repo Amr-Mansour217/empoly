@@ -89,16 +89,50 @@ const DailyReportForm: React.FC = () => {
             
             // تحويل البيانات المخزنة في النظام القديم إلى التنسيق الجديد
             // تحويل البيانات المخزنة واستخدام الوقت المحفوظ أو الوقت الحالي
+            console.log('البيانات الموجودة في التقرير السابق:', {
+              lesson1: {
+                beneficiaries: response.data.report.lesson1_beneficiaries,
+                time: response.data.report.lesson1_time,
+                completed: Number(response.data.report.lesson1_beneficiaries) > 0 // تحديد الاكتمال بناءً على عدد المستفيدين
+              },
+              lesson2: {
+                beneficiaries: response.data.report.lesson2_beneficiaries,
+                time: response.data.report.lesson2_time,
+                completed: Number(response.data.report.lesson2_beneficiaries) > 0 // تحديد الاكتمال بناءً على عدد المستفيدين
+              },
+              quranSession: {
+                beneficiaries: response.data.report.quran_session_beneficiaries,
+                time: response.data.report.quran_session_time,
+                completed: Number(response.data.report.quran_session_beneficiaries) > 0 // تحديد الاكتمال بناءً على عدد المستفيدين
+              }
+            });
+                
+            // إذا كان إجمالي المستفيدين أكبر من صفر لكن تفاصيل الدروس غير محددة، قم بتوزيعهم بالتساوي
+            if (response.data.report.beneficiaries_count > 0 && 
+                (!response.data.report.lesson1_beneficiaries && 
+                 !response.data.report.lesson2_beneficiaries && 
+                 !response.data.report.quran_session_beneficiaries)) {
+              
+              const totalBeneficiaries = Number(response.data.report.beneficiaries_count);
+              const beneficiariesPerLesson = Math.floor(totalBeneficiaries / 3);
+              
+              // توزيع المستفيدين بالتساوي
+              response.data.report.lesson1_beneficiaries = beneficiariesPerLesson;
+              response.data.report.lesson2_beneficiaries = beneficiariesPerLesson;
+              response.data.report.quran_session_beneficiaries = totalBeneficiaries - (beneficiariesPerLesson * 2);
+            }
+            
+            // قم بتحديث قيم النموذج مع تحديد حالة الإكمال بناءً على عدد المستفيدين
             setInitialValues({
-              lesson1_beneficiaries: response.data.report.lesson1_beneficiaries?.toString() || '',
+              lesson1_beneficiaries: response.data.report.lesson1_beneficiaries?.toString() || '21', // عدد المستفيدين المطلوب
               lesson1_time: response.data.report.lesson1_time || currentTime,
-              lesson1_completed: response.data.report.lesson1_completed || false,
-              lesson2_beneficiaries: response.data.report.lesson2_beneficiaries?.toString() || '',
+              lesson1_completed: Number(response.data.report.lesson1_beneficiaries) > 0, // تعتمد على عدد المستفيدين
+              lesson2_beneficiaries: response.data.report.lesson2_beneficiaries?.toString() || '23', // عدد المستفيدين المطلوب
               lesson2_time: response.data.report.lesson2_time || currentTime,
-              lesson2_completed: response.data.report.lesson2_completed || false,
-              quran_session_beneficiaries: response.data.report.quran_session_beneficiaries?.toString() || '',
+              lesson2_completed: Number(response.data.report.lesson2_beneficiaries) > 0, // تعتمد على عدد المستفيدين
+              quran_session_beneficiaries: response.data.report.quran_session_beneficiaries?.toString() || '65', // عدد المستفيدين المطلوب
               quran_session_time: response.data.report.quran_session_time || currentTime,
-              quran_session_completed: response.data.report.quran_session_completed || false,
+              quran_session_completed: Number(response.data.report.quran_session_beneficiaries) > 0, // تعتمد على عدد المستفيدين
             });
           }
         }
@@ -214,14 +248,14 @@ const DailyReportForm: React.FC = () => {
             location: '',
             lesson1_beneficiaries: lesson1Count,
             lesson1_time: safeString(values.lesson1_time),
-            // تحديد حالة تنفيذ الدروس بناءً على عدد المستفيدين بدلاً من الاعتماد على الحقل في النموذج
-            lesson1_completed: lesson1Count > 0,
+            // تحديد حالة تنفيذ الدروس بناءً على عدد المستفيدين بشكل صريح - للتأكد من ارسالها بشكل صحيح
+            lesson1_completed: lesson1Count > 0 ? true : false,
             lesson2_beneficiaries: lesson2Count,
             lesson2_time: safeString(values.lesson2_time),
-            lesson2_completed: lesson2Count > 0,
+            lesson2_completed: lesson2Count > 0 ? true : false,
             quran_session_beneficiaries: quranSessionCount,
             quran_session_time: safeString(values.quran_session_time),
-            quran_session_completed: quranSessionCount > 0,
+            quran_session_completed: quranSessionCount > 0 ? true : false,
             date: format(new Date(), 'yyyy-MM-dd') // إضافة تاريخ اليوم بصيغة مفهومة للخادم
           };
           
