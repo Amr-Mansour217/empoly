@@ -282,7 +282,7 @@ const Reports: React.FC = () => {
       // استعلام عن تفاصيل التقرير بواسطة معرف الموظف وتاريخ التقرير
       const response = await axios.get(`https://elmanafea.online/api/reports/employee/${report.employee_id}/details`, {
         params: {
-          // report_date: report.report_date
+          report_date: report.report_date
         }
       });
       

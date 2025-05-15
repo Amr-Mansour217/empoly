@@ -209,35 +209,6 @@ class ReportController {
       return res.status(500).json({ message: 'An error occurred while getting statistics' });
     }
   }
-  
-  // الحصول على تفاصيل تقرير موظف محدد
-  async getEmployeeReportDetails(req: Request, res: Response) {
-    try {
-      const employeeId = parseInt(req.params.id);
-      
-      if (isNaN(employeeId)) {
-        return res.status(400).json({ message: 'معرف الموظف غير صالح' });
-      }
-      
-      // الحصول على التاريخ من الاستعلام (أو التاريخ الحالي إذا لم يُحدد)
-      const date = req.query.date as string || new Date().toISOString().split('T')[0];
-      
-      // الحصول على تفاصيل التقرير من قاعدة البيانات
-      const reportDetails = await reportModel.getDetailedReportByEmployeeAndDate(employeeId, date);
-      
-      if (!reportDetails) {
-        return res.status(404).json({ message: 'لم يتم العثور على تقرير لهذا الموظف في هذا التاريخ' });
-      }
-      
-      return res.status(200).json({ 
-        success: true,
-        report: reportDetails 
-      });
-    } catch (error) {
-      console.error('الخطأ في الحصول على تفاصيل تقرير الموظف:', error);
-      return res.status(500).json({ message: 'حدث خطأ أثناء الحصول على تفاصيل التقرير' });
-    }
-  }
 }
 
 export default new ReportController(); 
